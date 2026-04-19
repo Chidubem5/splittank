@@ -1,6 +1,5 @@
 import { useState } from 'react'
 
-// SVG icons for each payment method
 function VenmoIcon() {
   return (
     <svg viewBox="0 0 32 32" fill="none" aria-hidden="true">
@@ -35,7 +34,6 @@ function ApplePayIcon() {
   return (
     <svg viewBox="0 0 32 32" fill="none" aria-hidden="true">
       <rect width="32" height="32" rx="7" fill="#1A1A1A" />
-      {/* Simplified apple shape */}
       <path
         d="M16 8.5c.8-1 2-1.5 3.3-1.4-.2 1.4-.8 2.6-1.6 3.4-.8.9-2 1.4-3.2 1.3.1-1.3.7-2.5 1.5-3.3z"
         fill="white"
@@ -60,7 +58,6 @@ const METHODS = [
       handle
         ? `https://venmo.com/u/${handle}?txn=pay&amount=${amount}&note=Split%20Tank`
         : 'https://venmo.com/',
-    note: (handle) => handle ? `@${handle}` : 'Opens Venmo',
     toast: (amount, handle) =>
       handle ? 'Opening Venmo — amount pre-filled' : `Copied $${amount} — opening Venmo`,
   },
@@ -75,7 +72,6 @@ const METHODS = [
       handle
         ? `https://cash.app/$${handle}/${amount}`
         : 'https://cash.app/',
-    note: (handle) => handle ? `$${handle}` : 'Opens Cash App',
     toast: (amount, handle) =>
       handle ? 'Opening Cash App — amount pre-filled' : `Copied $${amount} — opening Cash App`,
   },
@@ -85,11 +81,9 @@ const METHODS = [
     icon: <ZelleIcon />,
     accent: '#6D1ED4',
     bg: '#F3E5F5',
-    // Zelle has no URL API for pre-filling — copy to clipboard so user can paste
     copyAmount: true,
     getUrl: () => 'https://www.zellepay.com/',
-    note: () => 'Copies amount — paste in Zelle',
-    toast: (amount) => `Copied $${amount} — open Zelle in your bank app and paste`,
+    toast: (amount) => `Copied $${amount} — paste in your bank's Zelle`,
   },
   {
     id: 'applepay',
@@ -97,70 +91,54 @@ const METHODS = [
     icon: <ApplePayIcon />,
     accent: '#1A1A1A',
     bg: '#F5F5F5',
-    // Amount goes directly into the iMessage body — no clipboard needed
     copyAmount: false,
     getUrl: (_, amount) =>
       `sms:?body=${encodeURIComponent(`Here's my gas share: $${amount}`)}`,
-    note: () => 'Opens iMessage with amount typed',
     toast: () => 'Opening iMessage — select a contact and tap send',
   },
 ]
 
-export default function PaymentButtons({ amount, venmoHandle, cashAppHandle }) {
+export default function PaymentButtons({ amount, venmoHandle, cashAppHandle, zelleContact, appleContact }) {
   const [toast, setToast] = useState(null)
 
   const handleClick = async (method) => {
     const handle =
-      method.id === 'venmo' ? venmoHandle :
-      method.id === 'cashapp' ? cashAppHandle :
+      method.id === 'venmo'     ? venmoHandle :
+      method.id === 'cashapp'   ? cashAppHandle :
+      method.id === 'zelle'     ? zelleContact :
+      method.id === 'applepay'  ? appleContact :
       null
 
     if (method.copyAmount) {
-      try {
-        await navigator.clipboard.writeText(amount)
-      } catch {
-        // clipboard unavailable in some browsers — silently continue
-      }
+      try { await navigator.clipboard.writeText(amount) } catch { /* ignore */ }
     }
 
     setToast(method.toast(amount, handle))
     setTimeout(() => setToast(null), 4500)
 
-    const url = method.getUrl(handle, amount)
-    window.open(url, '_blank', 'noopener,noreferrer')
+    window.open(method.getUrl(handle, amount), '_blank', 'noopener,noreferrer')
   }
 
   return (
     <div className="payment-section">
       <p className="payment-heading">Send your share</p>
       <div className="payment-grid">
-        {METHODS.map(method => {
-          const handle =
-            method.id === 'venmo' ? venmoHandle :
-            method.id === 'cashapp' ? cashAppHandle :
-            null
-          return (
-            <button
-              key={method.id}
-              className="payment-btn"
-              style={{ '--pay-accent': method.accent, '--pay-bg': method.bg }}
-              onClick={() => handleClick(method)}
-              aria-label={`Send $${amount} via ${method.name}`}
-            >
-              <span className="pay-icon">{method.icon}</span>
-              <span className="pay-info">
-                <span className="pay-name">{method.name}</span>
-                <span className="pay-note">{method.note(handle)}</span>
-              </span>
-              <span className="pay-amount">${amount}</span>
-            </button>
-          )
-        })}
+        {METHODS.map(method => (
+          <button
+            key={method.id}
+            className="payment-btn"
+            style={{ '--pay-accent': method.accent, '--pay-bg': method.bg }}
+            onClick={() => handleClick(method)}
+            aria-label={`Send $${amount} via ${method.name}`}
+          >
+            <span className="pay-icon">{method.icon}</span>
+            <span className="pay-name">{method.name}</span>
+            <span className="pay-amount">${amount}</span>
+          </button>
+        ))}
       </div>
       {toast && (
-        <div className="payment-toast" role="status">
-          Amount copied — opening {toast}
-        </div>
+        <div className="payment-toast" role="status">{toast}</div>
       )}
     </div>
   )

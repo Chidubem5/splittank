@@ -39,7 +39,7 @@ function SpareTire({ cx, cy }) {
   )
 }
 
-export default function RoadHero() {
+export function RoadHeroSVG({ preserveAspectRatio = "xMidYMid meet" }) {
   // Road surface and car ground reference
   const ROAD_TOP   = 198  // y where road starts
   const GROUND_Y   = 258  // y where tires touch road
@@ -64,11 +64,10 @@ export default function RoadHero() {
   const dashH = 5
 
   return (
-    <div className="road-hero">
       <svg
         viewBox="0 0 900 260"
         xmlns="http://www.w3.org/2000/svg"
-        preserveAspectRatio="xMidYMid meet"
+        preserveAspectRatio={preserveAspectRatio}
         aria-hidden="true"
       >
         <defs>
@@ -271,6 +270,13 @@ export default function RoadHero() {
         {/* Pole 3 (700) → Pole 4 (840): right wire */}
         <path d="M 714,149 Q 785,163 856,155" fill="none" stroke="#5A5A5A" strokeWidth="1" />
       </svg>
+  )
+}
+
+export default function RoadHero() {
+  return (
+    <div className="road-hero">
+      <RoadHeroSVG />
     </div>
   )
 }

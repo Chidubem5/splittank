@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { getYears, getMakes, getModels, getOptions, getVehicleMPG } from './api/fuelEconomy'
 import { STATE_GAS_PRICES } from './data/gasPrices'
+import { fetchStateGasPrice } from './api/gasPrice'
 import RoadHero from './components/RoadHero'
 import RoadGallery from './components/RoadGallery'
 import PaymentButtons from './components/PaymentButtons'
@@ -16,6 +17,7 @@ export default function App() {
   const [state, setState] = useState('')
   const [gasPrice, setGasPrice] = useState('')
   const [customGas, setCustomGas] = useState(false)
+  const [livePriceDate, setLivePriceDate] = useState(null)
 
   // Car - API cascade
   const [years, setYears] = useState([])
@@ -44,6 +46,14 @@ export default function App() {
   // Driver payment handles (optional)
   const [venmoHandle, setVenmoHandle] = useState('')
   const [cashAppHandle, setCashAppHandle] = useState('')
+  const [zelleContact, setZelleContact] = useState('')
+  const [appleContact, setAppleContact] = useState('')
+
+  // Geolocation
+  const [detectingLocation, setDetectingLocation] = useState(false)
+  const [detectedLocation, setDetectedLocation] = useState(null) // { city, county, state }
+  const [locationError, setLocationError] = useState(null)
+  const [showManualState, setShowManualState] = useState(false)
 
   // (result is computed live — no separate state needed)
 
@@ -81,6 +91,8 @@ export default function App() {
     }
     setVenmoHandle(friend.payment?.venmoHandle   || '')
     setCashAppHandle(friend.payment?.cashAppHandle || '')
+    setZelleContact(friend.payment?.zelleContact   || '')
+    setAppleContact(friend.payment?.appleContact   || '')
   }
 
   function clearDriverFriend() {
@@ -88,6 +100,53 @@ export default function App() {
     setMpgData(null)
     setYear(''); setMake(''); setModel('')
     setVenmoHandle(''); setCashAppHandle('')
+    setZelleContact(''); setAppleContact('')
+  }
+
+  function detectLocation() {
+    if (!navigator.geolocation) {
+      setLocationError('Geolocation is not supported by this browser.')
+      return
+    }
+    setDetectingLocation(true)
+    setLocationError(null)
+    navigator.geolocation.getCurrentPosition(
+      async ({ coords }) => {
+        try {
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?lat=${coords.latitude}&lon=${coords.longitude}&format=json`,
+            { headers: { 'Accept-Language': 'en' } }
+          )
+          const data = await res.json()
+          const addr = data.address || {}
+          const stateName = addr.state
+          const county = addr.county || addr.city_district || null
+          const city = addr.city || addr.town || addr.village || null
+          if (stateName && STATE_GAS_PRICES[stateName]) {
+            setState(stateName)
+            setDetectedLocation({ city, county, state: stateName })
+            setShowManualState(false)
+          } else {
+            setLocationError('Could not determine your state. Select manually below.')
+            setShowManualState(true)
+          }
+        } catch {
+          setLocationError('Location lookup failed. Select your state manually.')
+          setShowManualState(true)
+        }
+        setDetectingLocation(false)
+      },
+      (err) => {
+        setDetectingLocation(false)
+        if (err.code === 1) {
+          setLocationError('Location access denied. Select your state manually.')
+        } else {
+          setLocationError('Could not get location. Select your state manually.')
+        }
+        setShowManualState(true)
+      },
+      { timeout: 10000, enableHighAccuracy: false }
+    )
   }
 
   // Load years on mount
@@ -154,9 +213,16 @@ export default function App() {
 
   // Auto-fill gas price when state changes (unless user already customized it)
   useEffect(() => {
-    if (state && !customGas) {
-      setGasPrice(STATE_GAS_PRICES[state]?.toFixed(2) ?? '')
-    }
+    if (!state || customGas) return
+    setLivePriceDate(null)
+    fetchStateGasPrice(state).then(live => {
+      if (live) {
+        setGasPrice(live.toFixed(2))
+        setLivePriceDate(new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }))
+      } else {
+        setGasPrice(STATE_GAS_PRICES[state]?.toFixed(2) ?? '')
+      }
+    })
   }, [state])
 
   const activeMpg = () => {
@@ -277,20 +343,70 @@ export default function App() {
           </div>
 
           <div className="field">
-            <label>State</label>
-            <select value={state} onChange={e => setState(e.target.value)}>
-              <option value="">Select a state...</option>
-              {Object.keys(STATE_GAS_PRICES).sort().map(s => (
-                <option key={s} value={s}>{s}</option>
-              ))}
-            </select>
+            <label>Your location</label>
+
+            {detectedLocation ? (
+              <div className="location-chip">
+                <span className="location-chip-icon">📍</span>
+                <span className="location-chip-text">
+                  {[detectedLocation.city, detectedLocation.county, detectedLocation.state]
+                    .filter(Boolean).join(' · ')}
+                </span>
+                <button
+                  type="button"
+                  className="location-chip-change"
+                  onClick={() => { setDetectedLocation(null); setShowManualState(true) }}
+                >
+                  Change
+                </button>
+              </div>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  className="use-location-btn"
+                  onClick={detectLocation}
+                  disabled={detectingLocation}
+                >
+                  {detectingLocation
+                    ? <><span className="location-spinner" /> Detecting your location…</>
+                    : <><span className="location-pin-icon">📍</span> Use My Location</>
+                  }
+                </button>
+                {locationError && <p className="location-error">{locationError}</p>}
+                {showManualState ? (
+                  <div className="manual-state-row">
+                    <select value={state} onChange={e => setState(e.target.value)}>
+                      <option value="">Select a state...</option>
+                      {Object.keys(STATE_GAS_PRICES).sort().map(s => (
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </select>
+                  </div>
+                ) : (
+                  <button type="button" className="enter-manually-link" onClick={() => setShowManualState(true)}>
+                    Enter state manually instead
+                  </button>
+                )}
+              </>
+            )}
           </div>
 
           <div className="field">
             <label>
               Gas price ($/gal)
-              {state && !customGas && <span className="badge">State avg</span>}
+              {state && !customGas && (
+                <span className="badge">
+                  {livePriceDate ? `Live · ${livePriceDate}` : 'State avg'}
+                </span>
+              )}
             </label>
+            {detectedLocation?.county && !customGas && (
+              <p className="county-note">
+                📍 {detectedLocation.county} — using {detectedLocation.state} weekly average.
+                Tap the price to enter your local pump price.
+              </p>
+            )}
             <div className="gas-price-row">
               <input
                 type="number"
@@ -303,7 +419,15 @@ export default function App() {
               {customGas && state && (
                 <button className="reset-btn" onClick={() => {
                   setCustomGas(false)
-                  setGasPrice(STATE_GAS_PRICES[state]?.toFixed(2) ?? '')
+                  setLivePriceDate(null)
+                  fetchStateGasPrice(state).then(live => {
+                    if (live) {
+                      setGasPrice(live.toFixed(2))
+                      setLivePriceDate(new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }))
+                    } else {
+                      setGasPrice(STATE_GAS_PRICES[state]?.toFixed(2) ?? '')
+                    }
+                  })
                 }}>
                   Reset to avg
                 </button>
@@ -555,6 +679,24 @@ export default function App() {
                 />
               </div>
             </div>
+            <div className="field">
+              <label>Zelle</label>
+              <input
+                type="text"
+                placeholder="phone or email"
+                value={zelleContact}
+                onChange={e => setZelleContact(e.target.value)}
+              />
+            </div>
+            <div className="field">
+              <label>Apple Pay</label>
+              <input
+                type="text"
+                placeholder="phone number"
+                value={appleContact}
+                onChange={e => setAppleContact(e.target.value)}
+              />
+            </div>
           </div>
 
           {liveResult && (
@@ -562,6 +704,8 @@ export default function App() {
               amount={liveResult.perPerson.toFixed(2)}
               venmoHandle={venmoHandle}
               cashAppHandle={cashAppHandle}
+              zelleContact={zelleContact}
+              appleContact={appleContact}
             />
           )}
         </section>
@@ -570,7 +714,7 @@ export default function App() {
       <RoadGallery />
 
       <footer className="app-footer">
-        Gas prices are state averages (EIA 2024 data) — override anytime.
+        Gas prices are fetched live from EIA weekly data — override anytime.
       </footer>
 
       {/* Modals */}
