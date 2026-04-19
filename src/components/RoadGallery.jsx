@@ -1,6 +1,5 @@
 import { RoadHeroSVG } from './RoadHero'
 
-/* Reusable wheel */
 function Wheel({ cx, cy, r = 18 }) {
   return (
     <g>
@@ -21,24 +20,46 @@ function Wheel({ cx, cy, r = 18 }) {
   )
 }
 
-/* Simple smiley head — emoji-style circle, no body */
-function Head({ cx, cy, r = 10, color, happy = true }) {
+function Head({ cx, cy, r = 10, skinTone = '#FFCE9F', hairColor = '#4E342E', happy = true, hasGlasses = false }) {
   return (
     <g>
-      <circle cx={cx} cy={cy} r={r} fill={color} />
-      <circle cx={cx - r*0.28} cy={cy - r*0.15} r={r*0.16} fill="#1C1C1E" />
-      <circle cx={cx + r*0.28} cy={cy - r*0.15} r={r*0.16} fill="#1C1C1E" />
+      {/* Ears */}
+      <ellipse cx={cx - r * 0.92} cy={cy + r * 0.06} rx={r * 0.21} ry={r * 0.28} fill={skinTone} />
+      <ellipse cx={cx + r * 0.92} cy={cy + r * 0.06} rx={r * 0.21} ry={r * 0.28} fill={skinTone} />
+      {/* Head */}
+      <circle cx={cx} cy={cy} r={r} fill={skinTone} />
+      {/* Hair */}
+      <ellipse cx={cx} cy={cy - r * 0.45} rx={r * 0.85} ry={r * 0.65} fill={hairColor} />
+      {/* Eye whites */}
+      <ellipse cx={cx - r * 0.3}  cy={cy - r * 0.1}  rx={r * 0.21} ry={r * 0.19} fill="white" />
+      <ellipse cx={cx + r * 0.3}  cy={cy - r * 0.1}  rx={r * 0.21} ry={r * 0.19} fill="white" />
+      {/* Pupils */}
+      <circle  cx={cx - r * 0.27} cy={cy - r * 0.08} r={r * 0.12}  fill="#1A1A1A" />
+      <circle  cx={cx + r * 0.27} cy={cy - r * 0.08} r={r * 0.12}  fill="#1A1A1A" />
+      {/* Eye shine */}
+      <circle  cx={cx - r * 0.21} cy={cy - r * 0.17} r={r * 0.05} fill="white" />
+      <circle  cx={cx + r * 0.35} cy={cy - r * 0.17} r={r * 0.05} fill="white" />
+      {/* Glasses */}
+      {hasGlasses && (
+        <g stroke="#5D4037" strokeWidth={r * 0.1} fill="none" opacity="0.9">
+          <ellipse cx={cx - r * 0.3} cy={cy - r * 0.1} rx={r * 0.23} ry={r * 0.21} />
+          <ellipse cx={cx + r * 0.3} cy={cy - r * 0.1} rx={r * 0.23} ry={r * 0.21} />
+          <line x1={cx - r*0.07} y1={cy - r*0.1} x2={cx + r*0.07} y2={cy - r*0.1} />
+          <line x1={cx - r*0.53} y1={cy - r*0.1} x2={cx - r*0.67} y2={cy - r*0.06} />
+          <line x1={cx + r*0.53} y1={cy - r*0.1} x2={cx + r*0.67} y2={cy - r*0.06} />
+        </g>
+      )}
+      {/* Mouth */}
       {happy
-        ? <path d={`M ${cx - r*0.3},${cy + r*0.2} Q ${cx},${cy + r*0.5} ${cx + r*0.3},${cy + r*0.2}`}
-                stroke="#1C1C1E" strokeWidth="1.5" fill="none" strokeLinecap="round" />
-        : <path d={`M ${cx - r*0.3},${cy + r*0.4} Q ${cx},${cy + r*0.15} ${cx + r*0.3},${cy + r*0.4}`}
-                stroke="#1C1C1E" strokeWidth="1.5" fill="none" strokeLinecap="round" />
+        ? <path d={`M ${cx-r*0.32},${cy+r*0.27} Q ${cx},${cy+r*0.58} ${cx+r*0.32},${cy+r*0.27}`}
+                stroke="#8B4513" strokeWidth={r*0.15} fill="none" strokeLinecap="round" />
+        : <path d={`M ${cx-r*0.32},${cy+r*0.5} Q ${cx},${cy+r*0.27} ${cx+r*0.32},${cy+r*0.5}`}
+                stroke="#8B4513" strokeWidth={r*0.15} fill="none" strokeLinecap="round" />
       }
     </g>
   )
 }
 
-/* Sky + road background shared helper */
 function SceneBg({ skyTop = '#0288D1', skyBot = '#4FC3F7', roadY = 138 }) {
   return (
     <>
@@ -61,7 +82,7 @@ function SceneBg({ skyTop = '#0288D1', skyBot = '#4FC3F7', roadY = 138 }) {
   )
 }
 
-/* ── Scene 1: Carpool — white sedan with 4 passengers ── */
+/* ── Scene 1: Carpool — white sedan with 4 diverse passengers ── */
 function CarpoolScene() {
   const roadY   = 136
   const groundY = 158
@@ -69,12 +90,13 @@ function CarpoolScene() {
   const roofY   = 94
   const winY    = roofY + 5
 
-  const heads = [
-    { cx: 72,  cy: winY + 11, color: '#FFC107' },
-    { cx: 92,  cy: winY + 11, color: '#F48FB1' },
-    { cx: 125, cy: winY + 11, color: '#A5D6A7' },
-    { cx: 148, cy: winY + 11, color: '#29B6F6' },
+  const chars = [
+    { cx: 72,  skinTone: '#FFCE9F', hairColor: '#1A1A1A' },
+    { cx: 93,  skinTone: '#C8834A', hairColor: '#3E1F00' },
+    { cx: 125, skinTone: '#FFCE9F', hairColor: '#C62828' },
+    { cx: 148, skinTone: '#E8A87C', hairColor: '#1A1A1A', hasGlasses: true },
   ]
+  const shirtColors = ['#1565C0', '#2E7D32', '#6A1B9A', '#E64A19']
 
   return (
     <svg viewBox="0 0 220 200" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -88,21 +110,31 @@ function CarpoolScene() {
         <ellipse cx="80" cy="30" rx="22" ry="10" fill="white" />
       </g>
 
-      {/* Shadow */}
+      {/* Car shadow */}
       <ellipse cx="110" cy={groundY + 2} rx="85" ry="5" fill="black" opacity="0.14" />
 
+      {/* Shirt hints at window sill — drawn before heads */}
+      {chars.map((c, i) => (
+        <rect key={i} x={c.cx - 11} y={bodyY - 3} width="22" height="10" rx="4"
+              fill={shirtColors[i]} opacity="0.88" />
+      ))}
+
       {/* HEADS first — visible through windows */}
-      {heads.map(h => <Head key={h.cx} cx={h.cx} cy={h.cy} r={10} color={h.color} />)}
+      {chars.map((c, i) => (
+        <Head key={i} cx={c.cx} cy={winY + 11} r={10}
+              skinTone={c.skinTone} hairColor={c.hairColor}
+              hasGlasses={c.hasGlasses} />
+      ))}
+
       {/* Steering wheel hint */}
       <circle cx="140" cy={winY + 22} r="6" fill="none" stroke="#9E9E9E" strokeWidth="1.8" />
-      <line x1="140" y1={winY + 16} x2="140" y2={winY + 28} stroke="#9E9E9E" strokeWidth="1.5" />
-      <line x1="134" y1={winY + 22} x2="146" y2={winY + 22} stroke="#9E9E9E" strokeWidth="1.5" />
+      <line x1="140" y1={winY+16} x2="140" y2={winY+28} stroke="#9E9E9E" strokeWidth="1.5" />
+      <line x1="134" y1={winY+22} x2="146" y2={winY+22} stroke="#9E9E9E" strokeWidth="1.5" />
 
       {/* CAR BODY — drawn after heads */}
-      {/* Lower body */}
       <rect x="18" y={bodyY} width="186" height="24" rx="6" fill="#F5F5F5" stroke="#BDBDBD" strokeWidth="1.5" />
       {/* Roof */}
-      <rect x="50"  y={roofY}     width="120" height="5" rx="2" fill="#E0E0E0" />
+      <rect x="50"  y={roofY} width="120" height="5" rx="2" fill="#E0E0E0" />
       {/* C-pillar */}
       <path d={`M 44,${bodyY} L 52,${roofY} L 58,${roofY} L 50,${bodyY} Z`} fill="#DCDCDC" />
       {/* B-pillar */}
@@ -110,15 +142,18 @@ function CarpoolScene() {
       {/* A-pillar */}
       <path d={`M 162,${roofY} L 180,${bodyY} L 174,${bodyY} L 158,${roofY} Z`} fill="#DCDCDC" />
       {/* Taillights */}
-      <rect x="12"  y={bodyY + 4} width="8" height="11" rx="2" fill="#EF9A9A" />
+      <rect x="12"  y={bodyY+4} width="8" height="11" rx="2" fill="#EF9A9A" />
       {/* Headlights */}
-      <rect x="202" y={bodyY + 4} width="8" height="11" rx="2" fill="#FFFDE7" stroke="#F9A825" strokeWidth="1" />
+      <rect x="202" y={bodyY+4} width="8" height="11" rx="2" fill="#FFFDE7" stroke="#F9A825" strokeWidth="1" />
+      {/* Door handles */}
+      <rect x="78"  y={bodyY+8} width="12" height="3" rx="1.5" fill="#C0C0C0" />
+      <rect x="130" y={bodyY+8} width="14" height="3" rx="1.5" fill="#C0C0C0" />
 
       {/* WINDOW GLASS — very light tint, drawn last */}
-      <path d={`M 52,${bodyY - 1} L 54,${roofY + 3} L 100,${roofY + 3} L 100,${bodyY - 1} Z`}
-            fill="#81D4FA" opacity="0.2" />
-      <path d={`M 112,${bodyY - 1} L 112,${roofY + 3} L 162,${roofY + 3} L 177,${bodyY - 1} Z`}
-            fill="#81D4FA" opacity="0.2" />
+      <path d={`M 52,${bodyY-1} L 54,${roofY+3} L 100,${roofY+3} L 100,${bodyY-1} Z`}
+            fill="#81D4FA" opacity="0.22" />
+      <path d={`M 112,${bodyY-1} L 112,${roofY+3} L 162,${roofY+3} L 177,${bodyY-1} Z`}
+            fill="#81D4FA" opacity="0.22" />
 
       <Wheel cx={60}  cy={groundY} r={18} />
       <Wheel cx={162} cy={groundY} r={18} />
@@ -126,8 +161,12 @@ function CarpoolScene() {
   )
 }
 
-/* ── Scene 2: Gas Price — pump with rising prices ── */
+/* ── Scene 2: Gas Price — shocked person next to pump ── */
 function GasPriceScene() {
+  const pX  = 162   // person cx
+  const pHY = 118   // person head cy
+  const hR  = 17    // head radius
+
   return (
     <svg viewBox="0 0 220 200" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
       <defs>
@@ -143,41 +182,41 @@ function GasPriceScene() {
 
       <rect width="220" height="200" fill="url(#gBg)" />
       {/* Giant $ watermark */}
-      <text x="110" y="145" textAnchor="middle" fontSize="160" fontWeight="900"
+      <text x="90" y="145" textAnchor="middle" fontSize="160" fontWeight="900"
             fill="#FFC107" opacity="0.07">$</text>
 
       {/* Pump body */}
-      <rect x="62" y="42" width="68" height="108" rx="8" fill="url(#gPump)" />
-      <rect x="57" y="36" width="78" height="12" rx="4" fill="#263238" />
-      {/* Highlight */}
-      <rect x="65" y="46" width="7" height="100" rx="3" fill="white" opacity="0.06" />
+      <rect x="28" y="42" width="68" height="108" rx="8" fill="url(#gPump)" />
+      <rect x="23" y="36" width="78" height="12" rx="4" fill="#263238" />
+      {/* Pump highlight */}
+      <rect x="31" y="46" width="7" height="100" rx="3" fill="white" opacity="0.06" />
 
       {/* Price display */}
-      <rect x="70" y="56" width="48" height="40" rx="5" fill="#0D0D0D" />
-      <text x="94" y="72" textAnchor="middle" fontSize="9" fontWeight="900"
+      <rect x="36" y="56" width="48" height="40" rx="5" fill="#0D0D0D" />
+      <text x="60" y="72" textAnchor="middle" fontSize="9" fontWeight="900"
             fill="#FF1744" letterSpacing="1">$4.85</text>
-      <text x="94" y="82" textAnchor="middle" fontSize="6"
+      <text x="60" y="82" textAnchor="middle" fontSize="6"
             fill="#78909C">/gallon</text>
-      <text x="94" y="92" textAnchor="middle" fontSize="7" fontWeight="700"
+      <text x="60" y="92" textAnchor="middle" fontSize="7" fontWeight="700"
             fill="#FF5252" opacity="0.85">↑ UP 12¢</text>
 
       {/* Keypad */}
       {[0,1,2].map(col => [0,1,2].map(row => (
         <circle key={`${col}-${row}`}
-          cx={76 + col*11} cy={108 + row*9} r="3" fill="#455A64" />
+          cx={42 + col*11} cy={108 + row*9} r="3" fill="#455A64" />
       )))}
 
       {/* Hose */}
-      <rect x="130" y="76" width="22" height="6" rx="3" fill="#78909C" />
-      <rect x="148" y="70" width="6" height="16" rx="3" fill="#607D8B" />
-      <path d="M 130 79 Q 160 96 154 122"
+      <rect x="96" y="76" width="22" height="6" rx="3" fill="#78909C" />
+      <rect x="114" y="70" width="6" height="16" rx="3" fill="#607D8B" />
+      <path d="M 96 79 Q 130 100 122 126"
             stroke="#263238" strokeWidth="5" fill="none" strokeLinecap="round" />
-      <path d="M 130 79 Q 160 96 154 122"
+      <path d="M 96 79 Q 130 100 122 126"
             stroke="#546E7A" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeDasharray="3 4" />
-      <rect x="147" y="120" width="12" height="8" rx="2" fill="#1C1C1E" />
+      <rect x="115" y="124" width="12" height="8" rx="2" fill="#1C1C1E" />
 
-      {/* Rising arrows */}
-      {[{ x:154,t:44 }, { x:168,t:36 }, { x:182,t:46 }].map(({ x, t }) => (
+      {/* Rising arrows above pump */}
+      {[{ x:34,t:26 }, { x:50,t:18 }, { x:66,t:28 }].map(({ x, t }) => (
         <g key={x}>
           <polygon points={`${x-5},${t+9} ${x+5},${t+9} ${x},${t}`} fill="#FF1744" />
           <line x1={x} y1={t+9} x2={x} y2={t+20}
@@ -185,25 +224,41 @@ function GasPriceScene() {
         </g>
       ))}
 
-      {/* Shocked face */}
-      <Head cx={94} cy={134} r={16} color="#FFC107" happy={false} />
+      {/* Shocked person body — drawn before head */}
+      {/* Shirt */}
+      <rect x={pX-16} y={pHY+hR} width="32" height="26" rx="7" fill="#1565C0" />
+      {/* Arms raised in shock */}
+      <line x1={pX-14} y1={pHY+hR+8} x2={pX-34} y2={pHY-4}
+            stroke="#E8A87C" strokeWidth="8" strokeLinecap="round" />
+      <line x1={pX+14} y1={pHY+hR+8} x2={pX+34} y2={pHY-4}
+            stroke="#E8A87C" strokeWidth="8" strokeLinecap="round" />
+      {/* Hands */}
+      <circle cx={pX-34} cy={pHY-4} r="6" fill="#E8A87C" />
+      <circle cx={pX+34} cy={pHY-4} r="6" fill="#E8A87C" />
+
+      {/* Head last — on top of body */}
+      <Head cx={pX} cy={pHY} r={hR} skinTone="#E8A87C" hairColor="#5D4037" happy={false} />
 
       {/* Ground */}
       <rect y="162" width="220" height="38" fill="#BDBDBD" />
-      <rect x="52"  y="150"  width="88" height="14" rx="5" fill="#263238" />
+      <rect x="18"  y="148"  width="88" height="16" rx="5" fill="#263238" />
     </svg>
   )
 }
 
-/* ── Scene 3: Fun Trip — yellow SUV with 3 smiling passengers ── */
+/* ── Scene 3: Fun Trip — yellow SUV with happy passengers ── */
 function FunTripScene() {
   const roadY   = 140
   const groundY = 155
   const CAR_TOP = 128
-  const roofY   = CAR_TOP - 32
+  const roofY   = CAR_TOP - 32   // 96
 
-  const headColors = ['#FF7043', '#EF5350', '#A5D6A7']
-  const headXs     = [57, 111, 158]
+  const chars = [
+    { cx: 57,  skinTone: '#FFCE9F', hairColor: '#F9A825' },
+    { cx: 111, skinTone: '#C8834A', hairColor: '#1A1A1A', hasGlasses: true },
+    { cx: 158, skinTone: '#8D5524', hairColor: '#1A1A1A' },
+  ]
+  const shirtColors = ['#E64A19', '#1565C0', '#2E7D32']
 
   return (
     <svg viewBox="0 0 220 200" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -232,11 +287,11 @@ function FunTripScene() {
       <circle cx="184" cy="28" r="22" fill="#FFD740" />
       <circle cx="184" cy="28" r="14" fill="#FFF9C4" />
       {[0,45,90,135,180,225,270,315].map(a => {
-        const r = a * Math.PI / 180
+        const rad = a * Math.PI / 180
         return (
           <line key={a}
-            x1={184 + 20*Math.cos(r)} y1={28 + 20*Math.sin(r)}
-            x2={184 + 29*Math.cos(r)} y2={28 + 29*Math.sin(r)}
+            x1={184 + 20*Math.cos(rad)} y1={28 + 20*Math.sin(rad)}
+            x2={184 + 29*Math.cos(rad)} y2={28 + 29*Math.sin(rad)}
             stroke="#FFC107" strokeWidth="2.5" strokeLinecap="round" opacity="0.85"
           />
         )
@@ -247,17 +302,26 @@ function FunTripScene() {
         <text key={i} x={x} y={y} fontSize={i%2?9:12} fill={i%2?"white":"#FFC107"} opacity="0.9">★</text>
       ))}
 
-      {/* Shadow */}
+      {/* Car shadow */}
       <ellipse cx="110" cy={groundY + 2} rx="92" ry="5" fill="black" opacity="0.18" />
 
-      {/* HEADS — drawn before car body */}
-      {headXs.map((cx, i) => (
-        <Head key={cx} cx={cx} cy={roofY + 11} r={11} color={headColors[i]} />
+      {/* Shirt hints */}
+      {chars.map((c, i) => (
+        <rect key={i} x={c.cx - 12} y={CAR_TOP - 3} width="24" height="10" rx="4"
+              fill={shirtColors[i]} opacity="0.9" />
       ))}
+
+      {/* HEADS — drawn before car body */}
+      {chars.map((c, i) => (
+        <Head key={i} cx={c.cx} cy={roofY + 11} r={11}
+              skinTone={c.skinTone} hairColor={c.hairColor}
+              hasGlasses={c.hasGlasses} />
+      ))}
+
       {/* Steering wheel */}
       <circle cx="150" cy={CAR_TOP - 4} r="8" fill="none" stroke="#9E9E9E" strokeWidth="2" />
-      <line x1="150" y1={CAR_TOP - 12} x2="150" y2={CAR_TOP + 4} stroke="#9E9E9E" strokeWidth="1.5" />
-      <line x1="142" y1={CAR_TOP - 4} x2="158" y2={CAR_TOP - 4} stroke="#9E9E9E" strokeWidth="1.5" />
+      <line x1="150" y1={CAR_TOP-12} x2="150" y2={CAR_TOP+4} stroke="#9E9E9E" strokeWidth="1.5" />
+      <line x1="142" y1={CAR_TOP-4}  x2="158" y2={CAR_TOP-4} stroke="#9E9E9E" strokeWidth="1.5" />
 
       {/* CAR BODY on top */}
       <rect x="8"  y={CAR_TOP} width="204" height="26" rx="5" fill="url(#fCar)" stroke="#F9A825" strokeWidth="2" />
@@ -269,16 +333,16 @@ function FunTripScene() {
       <rect x="90" y={roofY} width="6" height={CAR_TOP - roofY} fill="#F9A825" />
       {/* A-pillar */}
       <path d={`M 180,${roofY} L 202,${CAR_TOP} L 194,${CAR_TOP} L 176,${roofY} Z`} fill="#F9A825" />
-      {/* Door details */}
-      <line x1="90" y1={CAR_TOP} x2="90" y2={CAR_TOP+26} stroke="#F9A825" strokeWidth="1.5" opacity="0.5" />
+      {/* Door lines */}
+      <line x1="90"  y1={CAR_TOP} x2="90"  y2={CAR_TOP+26} stroke="#F9A825" strokeWidth="1.5" opacity="0.5" />
       <line x1="150" y1={CAR_TOP} x2="150" y2={CAR_TOP+26} stroke="#F9A825" strokeWidth="1.5" opacity="0.5" />
       {/* Lights */}
       <rect x="202" y={CAR_TOP+4} width="8" height="11" rx="2" fill="#FFFDE7" stroke="#F9A825" strokeWidth="1" />
       <rect x="8"   y={CAR_TOP+4} width="8" height="11" rx="2" fill="#EF9A9A" />
 
       {/* WINDOW GLASS — last */}
-      <rect x="37"  y={roofY+4} width="53" height={CAR_TOP-roofY-4} rx="2" fill="#81D4FA" opacity="0.3" />
-      <rect x="97"  y={roofY+4} width="79" height={CAR_TOP-roofY-4} rx="2" fill="#81D4FA" opacity="0.3" />
+      <rect x="37"  y={roofY+4} width="53" height={CAR_TOP-roofY-4} rx="2" fill="#81D4FA" opacity="0.26" />
+      <rect x="97"  y={roofY+4} width="79" height={CAR_TOP-roofY-4} rx="2" fill="#81D4FA" opacity="0.26" />
 
       <Wheel cx={58}  cy={groundY} r={20} />
       <Wheel cx={163} cy={groundY} r={20} />

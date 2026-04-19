@@ -1,3 +1,22 @@
+function Head({ cx, cy, r = 10, skinTone = '#FFCE9F', hairColor = '#4E342E' }) {
+  return (
+    <g>
+      <ellipse cx={cx - r * 0.92} cy={cy + r * 0.06} rx={r * 0.21} ry={r * 0.28} fill={skinTone} />
+      <ellipse cx={cx + r * 0.92} cy={cy + r * 0.06} rx={r * 0.21} ry={r * 0.28} fill={skinTone} />
+      <circle cx={cx} cy={cy} r={r} fill={skinTone} />
+      <ellipse cx={cx} cy={cy - r * 0.45} rx={r * 0.85} ry={r * 0.65} fill={hairColor} />
+      <ellipse cx={cx - r * 0.3}  cy={cy - r * 0.1}  rx={r * 0.21} ry={r * 0.19} fill="white" />
+      <ellipse cx={cx + r * 0.3}  cy={cy - r * 0.1}  rx={r * 0.21} ry={r * 0.19} fill="white" />
+      <circle  cx={cx - r * 0.27} cy={cy - r * 0.08} r={r * 0.12}  fill="#1A1A1A" />
+      <circle  cx={cx + r * 0.27} cy={cy - r * 0.08} r={r * 0.12}  fill="#1A1A1A" />
+      <circle  cx={cx - r * 0.21} cy={cy - r * 0.17} r={r * 0.05}  fill="white" />
+      <circle  cx={cx + r * 0.35} cy={cy - r * 0.17} r={r * 0.05}  fill="white" />
+      <path d={`M ${cx-r*0.32},${cy+r*0.27} Q ${cx},${cy+r*0.56} ${cx+r*0.32},${cy+r*0.27}`}
+            stroke="#8B4513" strokeWidth={r*0.15} fill="none" strokeLinecap="round" />
+    </g>
+  )
+}
+
 function Wheel({ cx, cy }) {
   const spokes = [0, 72, 144, 216, 288]
   return (
@@ -150,13 +169,23 @@ export function RoadHeroSVG({ preserveAspectRatio = "xMidYMid meet" }) {
           fill="white" stroke="#D8D8D8" strokeWidth="1.5"
         />
 
+        {/* Passengers — drawn after cabin fill, before window tint */}
+        {/* Rear passenger shirt hint */}
+        <rect x={BODY_REAR + 26} y={WIN_SILL - 8} width={26} height={10} rx={3} fill="#2E7D32" opacity="0.85" />
+        {/* Driver shirt hint */}
+        <rect x={BODY_REAR + 80} y={WIN_SILL - 8} width={30} height={10} rx={3} fill="#1565C0" opacity="0.85" />
+        {/* Rear passenger */}
+        <Head cx={BODY_REAR + 40} cy={ROOF_Y + 21} r={11} skinTone="#C8834A" hairColor="#1A1A1A" />
+        {/* Driver */}
+        <Head cx={BODY_REAR + 96} cy={ROOF_Y + 21} r={11} skinTone="#FFCE9F" hairColor="#4E342E" />
+
         {/* Rear window (upright, characteristic of 2008 RAV4) */}
         <path
           d={`M ${BODY_REAR + 24},${WIN_SILL - 1}
               L ${BODY_REAR + 26},${ROOF_Y + 3}
               L ${BODY_REAR + 68},${ROOF_Y + 3}
               L ${BODY_REAR + 68},${WIN_SILL - 1} Z`}
-          fill="#90CAF9" opacity="0.70"
+          fill="#90CAF9" opacity="0.40"
         />
 
         {/* B-pillar */}
@@ -172,7 +201,7 @@ export function RoadHeroSVG({ preserveAspectRatio = "xMidYMid meet" }) {
               L ${BODY_REAR + 77},${ROOF_Y + 3}
               L ${BODY_FRONT - 65},${ROOF_Y + 3}
               L ${BODY_FRONT - 42},${WIN_SILL - 1} Z`}
-          fill="#90CAF9" opacity="0.70"
+          fill="#90CAF9" opacity="0.40"
         />
 
         {/* Roof rails */}
