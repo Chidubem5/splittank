@@ -1,6 +1,28 @@
-const EIA_KEY = import.meta.env.VITE_EIA_API_KEY
-const CACHE_TTL = 86_400_000 // 24 hours
+// gasPrice.js
+// Fetches current retail gas prices from the U.S. Energy Information
+// Administration (EIA) API v2. The EIA publishes weekly prices every Monday.
+//
+// PRICE RESOLUTION HIERARCHY (most → least granular):
+//   1. Metro area  — 10 major cities (e.g. "Los Angeles metro")
+//   2. State       — ~9 states have their own weekly survey
+//   3. PADD sub-region — regional average covering groups of states
+//   4. Static fallback (gasPrices.js) — hardcoded if no API key is set
+//
+// Each result is cached in localStorage for 24 hours so we don't
+// hammer the API on every page load.
 
+// Read the EIA API key from the Vite environment variable.
+// In development, set VITE_EIA_API_KEY in your .env file.
+// In production, set it in the Vercel dashboard under Environment Variables.
+const EIA_KEY = import.meta.env.VITE_EIA_API_KEY
+
+// How long a cached price stays fresh (24 hours in milliseconds)
+const CACHE_TTL = 86_400_000
+
+// ─────────────────────────────────────────
+// EIA area codes for each state.
+// The EIA uses short codes like "SCA" (State California) in their API.
+// ─────────────────────────────────────────
 const STATE_AREA = {
   Alabama: 'SAL', Alaska: 'SAK', Arizona: 'SAZ', Arkansas: 'SAR',
   California: 'SCA', Colorado: 'SCO', Connecticut: 'SCT', Delaware: 'SDE',
@@ -18,8 +40,10 @@ const STATE_AREA = {
   Wisconsin: 'SWI', Wyoming: 'SWY',
 }
 
-// States without direct EIA weekly survey fall back to their PADD sub-region
-// (sub-regions R1X/R1Y/R1Z give more accuracy than the full PADD 1 R10)
+// PADD = Petroleum Administration for Defense Districts.
+// The EIA divides the US into 5 PADDs and sub-regions.
+// States without their own weekly survey fall back to their PADD sub-region.
+// Sub-regions (R1X, R1Y, etc.) are more accurate than the full PADD district.
 const PADD_FALLBACK = {
   // PADD 1A — New England
   SCT: 'R1X', SME: 'R1X', SNH: 'R1X', SRI: 'R1X', SVT: 'R1X',
@@ -39,7 +63,9 @@ const PADD_FALLBACK = {
   SAK: 'R50', SAZ: 'R50', SHI: 'R50', SNV: 'R50', SOR: 'R50',
 }
 
-// EIA metro area codes — more granular than state for 10 major cities
+// EIA metro-area codes for 10 major cities.
+// These give more accurate prices than the state average because gas
+// prices can vary significantly between a city and the surrounding state.
 const METRO_LABELS = {
   YBOS: 'Boston metro',      YORD: 'Chicago metro',
   YCLE: 'Cleveland metro',   YDEN: 'Denver metro',
@@ -48,7 +74,9 @@ const METRO_LABELS = {
   Y05SF: 'San Francisco metro', Y48SE: 'Seattle metro',
 }
 
-// county (normalized, no "County"/"Parish") + "|" + full state name → metro code
+// Maps "county name (normalized) | state name" → EIA metro area code.
+// We normalize county names (strip "County", lowercase) before looking up
+// so that "Los Angeles County" and "los angeles" both match.
 const COUNTY_METRO = {
   // Chicago metro — IL
   'cook|Illinois': 'YORD', 'dupage|Illinois': 'YORD',
@@ -102,7 +130,13 @@ const COUNTY_METRO = {
   'thurston|Washington': 'Y48SE',
 }
 
-// Strip "County" / "Parish" / "Borough" etc. and lowercase for COUNTY_METRO lookup
+// ─────────────────────────────────────────
+// normalizeCounty
+// Strips the suffix word ("County", "Parish", "Borough", etc.) and lowercases
+// the result. This lets us match user-facing names like "Harris County" to
+// the key "harris" used in COUNTY_METRO above.
+// .replace() uses a regex: \s+ = one or more spaces, $ = end of string.
+// ─────────────────────────────────────────
 export function normalizeCounty(county) {
   return county
     .toLowerCase()
@@ -114,57 +148,84 @@ export function normalizeCounty(county) {
     .trim()
 }
 
+// ─────────────────────────────────────────
+// getCached / setCached — localStorage price cache
+// We store each price in the browser's localStorage so repeated loads
+// within 24 hours don't make redundant API calls.
+// The cache key is like "eia_SCA" (prefix + area code).
+// Stored value: { price, period, label, t } where t = timestamp of when
+// the price was cached (in milliseconds since Jan 1 1970).
+// ─────────────────────────────────────────
 function getCached(key) {
   try {
     const raw = localStorage.getItem(key)
     if (!raw) return null
     const c = JSON.parse(raw)
+    // Check if the cached value is still fresh (within 24 hours)
     if (Date.now() - c.t < CACHE_TTL) return { price: c.price, period: c.period, label: c.label }
-  } catch {}
+  } catch {}  // ignore errors (e.g. private browsing mode blocks localStorage)
   return null
 }
 
 function setCached(key, result) {
   try {
     localStorage.setItem(key, JSON.stringify({
-      price: result.price, period: result.period, label: result.label ?? null, t: Date.now(),
+      price: result.price, period: result.period, label: result.label ?? null,
+      t: Date.now(),  // record when we cached this price
     }))
   } catch {}
 }
 
+// ─────────────────────────────────────────
+// fetchArea — low-level EIA API call
+// Queries the EIA for the most recent weekly price for one area code.
+// Returns { price: 3.45, period: "2026-04-14" } or null on failure.
+// The EIA response looks like:
+//   { response: { data: [{ value: "3.450", period: "2026-04-14" }] } }
+// ─────────────────────────────────────────
 async function fetchArea(area) {
   const url =
     `https://api.eia.gov/v2/petroleum/pri/gnd/data/` +
     `?api_key=${EIA_KEY}` +
     `&frequency=weekly` +
     `&data[0]=value` +
-    `&facets[product][]=EPM0` +
-    `&facets[duoarea][]=${area}` +
+    `&facets[product][]=EPM0` +      // EPM0 = regular unleaded gasoline
+    `&facets[duoarea][]=${area}` +   // the area code we're querying
     `&sort[0][column]=period` +
-    `&sort[0][direction]=desc` +
-    `&length=1`
+    `&sort[0][direction]=desc` +     // newest data first
+    `&length=1`                      // we only need the most recent week
   const res = await fetch(url)
   if (!res.ok) return null
   const json = await res.json()
-  const entry = json?.response?.data?.[0]
+  const entry = json?.response?.data?.[0]  // ?. = optional chaining: safe if null
   return entry?.value ? { price: parseFloat(entry.value), period: entry.period } : null
 }
 
-// county is optional — if provided and in a known metro, fetches metro-level price
+// ─────────────────────────────────────────
+// fetchStateGasPrice — main exported function
+// Resolves the best available gas price for a given state + optional county.
+// The three-level fallback ensures we always return something useful:
+//   Level 1: metro area price (only if county is in a known metro)
+//   Level 2: state-level price (only ~9 states have this)
+//   Level 3: PADD sub-region price (covers all remaining states)
+// Returns null if EIA_KEY is missing (app will use static fallback instead).
+// ─────────────────────────────────────────
 export async function fetchStateGasPrice(stateName, county = null) {
-  if (!EIA_KEY) return null
-  const area = STATE_AREA[stateName]
-  if (!area) return null
+  if (!EIA_KEY) return null   // no API key — let the caller use the static prices
 
+  const area = STATE_AREA[stateName]
+  if (!area) return null   // unrecognized state
+
+  // Determine if the county maps to a metro area code
   const metroArea = county
     ? (COUNTY_METRO[`${normalizeCounty(county)}|${stateName}`] ?? null)
     : null
 
   try {
-    // 1. Try metro area (when county maps to one)
+    // ── Level 1: Try metro area ───────────────────────────────────────
     if (metroArea) {
       const cached = getCached(`eia_${metroArea}`)
-      if (cached) return cached
+      if (cached) return cached   // cache hit — return immediately
       const r = await fetchArea(metroArea)
       if (r) {
         const result = { ...r, label: METRO_LABELS[metroArea] }
@@ -173,13 +234,13 @@ export async function fetchStateGasPrice(stateName, county = null) {
       }
     }
 
-    // 2. Try state-level
+    // ── Level 2: Try state-level ──────────────────────────────────────
     const cached = getCached(`eia_${area}`)
     if (cached) return cached
     const r = await fetchArea(area)
     if (r) { setCached(`eia_${area}`, r); return r }
 
-    // 3. PADD sub-region fallback
+    // ── Level 3: PADD sub-region fallback ────────────────────────────
     const paddArea = PADD_FALLBACK[area]
     if (paddArea) {
       const cached = getCached(`eia_${paddArea}`)
@@ -188,8 +249,8 @@ export async function fetchStateGasPrice(stateName, county = null) {
       if (r) { setCached(`eia_${paddArea}`, r); return r }
     }
 
-    return null
+    return null   // all three levels failed
   } catch {
-    return null
+    return null   // network error — let the caller use static prices
   }
 }

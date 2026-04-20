@@ -1,5 +1,15 @@
-// Fallback prices ($/gal, regular unleaded) — used when EIA API key is absent.
-// Updated April 2026 from EIA weekly data + PADD sub-region averages.
+// gasPrices.js
+// Static fallback gas prices ($/gallon, regular unleaded) used when:
+//   a) The EIA API key is not configured, OR
+//   b) The EIA API call fails for any reason (network error, rate limit, etc.)
+//
+// These prices are updated manually and represent state averages from
+// EIA weekly data published in April 2026.
+//
+// States with higher prices (CA, HI, WA, OR, NV) are in the expensive
+// West Coast and Pacific PADD 5 region. States with lower prices (TX, OK, MS)
+// are in the cheaper Gulf Coast / Midwest regions.
+
 export const STATE_GAS_PRICES = {
   Alabama:              3.84,
   Alaska:               5.50,

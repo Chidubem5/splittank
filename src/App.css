@@ -34,6 +34,13 @@
 ═══════════════════════════════════════════ */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+html { scroll-behavior: smooth; }
+
+button, input, select, textarea, a {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   background: var(--bg);
@@ -333,7 +340,8 @@ select:disabled { opacity: 0.4; cursor: not-allowed; }
   font-weight: 700;
   cursor: pointer;
   text-decoration: underline;
-  padding: 0;
+  padding: 8px 10px;
+  margin: -8px -10px;
 }
 
 .location-error {
@@ -356,7 +364,7 @@ select:disabled { opacity: 0.4; cursor: not-allowed; }
   font-weight: 600;
   cursor: pointer;
   text-decoration: underline;
-  padding: 0;
+  padding: 10px 0;
   text-align: center;
   width: 100%;
 }
@@ -403,9 +411,6 @@ select:disabled { opacity: 0.4; cursor: not-allowed; }
   margin-bottom: 14px;
 }
 
-@media (max-width: 480px) {
-  .car-grid { grid-template-columns: 1fr; }
-}
 
 .loading-text {
   font-size: 0.82rem;
@@ -447,6 +452,7 @@ select:disabled { opacity: 0.4; cursor: not-allowed; }
   cursor: pointer;
   transition: all 0.15s;
   text-transform: capitalize;
+  min-height: 40px;
 }
 .mpg-tab.active {
   background: var(--yellow);
@@ -787,7 +793,7 @@ select:disabled { opacity: 0.4; cursor: not-allowed; }
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(0,0,0,0.14);
 }
-.payment-btn:active { transform: translateY(0); }
+.payment-btn:active { transform: scale(0.97); opacity: 0.88; }
 .pay-icon { width: 28px; height: 28px; flex-shrink: 0; }
 .pay-icon svg { width: 28px; height: 28px; display: block; }
 .pay-name {
@@ -823,6 +829,12 @@ select:disabled { opacity: 0.4; cursor: not-allowed; }
   to   { opacity: 1; transform: translateY(0); }
 }
 
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.county-field { animation: slideDown 0.2s ease; }
+
 /* ═══════════════════════════════════════════
    INLINE LINK
 ═══════════════════════════════════════════ */
@@ -838,19 +850,47 @@ select:disabled { opacity: 0.4; cursor: not-allowed; }
 }
 
 /* ═══════════════════════════════════════════
+   SHARE BUTTON
+═══════════════════════════════════════════ */
+.share-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  margin-top: 14px;
+  padding: 14px;
+  background: var(--blue);
+  border: 2px solid var(--blue-dark);
+  border-radius: var(--radius-sm);
+  font-size: 0.92rem;
+  font-weight: 800;
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+}
+.share-btn:hover { background: var(--blue-dark); }
+.share-btn:active { transform: scale(0.98); }
+
+/* ═══════════════════════════════════════════
    HERO BANNER
+   On desktop we fix the container height so the SVG fills edge-to-edge.
+   The SVG uses preserveAspectRatio="xMidYMax slice" which scales the image
+   to fill the full width, cropping the sky at the top while keeping the
+   car and road always anchored to the bottom. On mobile the height is
+   left as "auto" so the image stays proportionally sized.
 ═══════════════════════════════════════════ */
 .road-hero {
   width: 100%;
+  height: 220px; /* fixed height on desktop — SVG fills edge-to-edge */
   overflow: hidden;
   line-height: 0;
   border-bottom: 4px solid var(--border);
 }
 .road-hero svg {
   width: 100%;
-  height: auto;
+  height: 100%; /* fill the fixed container completely */
   display: block;
-  max-height: 220px;
 }
 
 /* ═══════════════════════════════════════════
@@ -1191,7 +1231,11 @@ select:disabled { opacity: 0.4; cursor: not-allowed; }
   .app-header h1 { font-size: 1.55rem; }
   .app-header p  { font-size: 0.75rem; }
 
-  .app-main { padding: 14px 12px 64px; gap: 12px; }
+  .app-main {
+    padding: 14px 12px 64px;
+    padding-bottom: max(64px, calc(48px + env(safe-area-inset-bottom)));
+    gap: 12px;
+  }
 
   .card { padding: 16px; border-radius: 14px; }
 
@@ -1205,7 +1249,8 @@ select:disabled { opacity: 0.4; cursor: not-allowed; }
 
   .counter-btn { width: 48px; height: 48px; font-size: 1.5rem; }
 
-  .car-grid { grid-template-columns: 1fr; }
+  .car-grid { grid-template-columns: 1fr 1fr; }
+  .car-grid .field:last-child { grid-column: 1 / -1; }
 
   .mpg-tabs { flex-wrap: wrap; }
 
@@ -1223,4 +1268,14 @@ select:disabled { opacity: 0.4; cursor: not-allowed; }
   .use-location-btn { font-size: 0.95rem; min-height: 52px; }
 
   .road-gallery { padding: 20px 12px 28px; }
+
+  /* Mobile: let the hero scale proportionally instead of fixed height */
+  .road-hero { height: auto; }
+  .road-hero svg { height: auto; max-height: 220px; }
+
+  .app-footer { padding-bottom: calc(14px + env(safe-area-inset-bottom)); }
+}
+
+@media (max-width: 380px) {
+  .per-person-amount { font-size: 2.4rem; }
 }
