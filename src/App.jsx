@@ -111,13 +111,6 @@ export default function App() {
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
 
-  // Scroll the result card into view the first time a result appears.
-  // liveResult !== null is a boolean derived from the computed result value.
-  // useEffect re-runs whenever this boolean changes (false→true triggers the scroll).
-  useEffect(() => {
-    if (liveResult) resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-  }, [liveResult !== null]) // eslint-disable-line react-hooks/exhaustive-deps
-
   // Pre-fill car and payment info from a friend's saved profile.
   function applyDriverFriend(friend) {
     setDriverFriend(friend)
@@ -341,6 +334,11 @@ export default function App() {
 
     return { gallons, totalCost, perPerson, passengers, splitMode, miles: m, mpg, gp }
   })()
+
+  // Scroll the result card into view the first time a result appears.
+  useEffect(() => {
+    if (liveResult) resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  }, [liveResult !== null]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── JSX ───────────────────────────────────────────────────────────────────
   // JSX looks like HTML but is actually JavaScript. Each tag is a function call.
