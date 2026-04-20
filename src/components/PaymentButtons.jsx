@@ -75,24 +75,21 @@ const METHODS = [
   {
     id: 'venmo',
     name: 'Venmo',
-    icon: <VenmoIcon />,
+    Icon: VenmoIcon,
     accent: '#3D95CE',    // brand color used for the button border and amount text
     bg: '#E3F2FD',        // light tint of the brand color for the button background
     copyAmount: true,     // should we copy the amount to clipboard before opening?
-    // getUrl builds the deep link: if we have a handle, go directly to their
-    // payment page; otherwise just open the app homepage
     getUrl: (handle, amount) =>
       handle
         ? `https://venmo.com/u/${handle}?txn=pay&amount=${amount}&note=Split%20Tank`
         : 'https://venmo.com/',
-    // toast message shown to the user after clicking
     toast: (amount, handle) =>
       handle ? 'Opening Venmo — amount pre-filled' : `Copied $${amount} — opening Venmo`,
   },
   {
     id: 'cashapp',
     name: 'Cash App',
-    icon: <CashAppIcon />,
+    Icon: CashAppIcon,
     accent: '#00C244',
     bg: '#E8F5E9',
     copyAmount: true,
@@ -106,24 +103,20 @@ const METHODS = [
   {
     id: 'zelle',
     name: 'Zelle',
-    icon: <ZelleIcon />,
+    Icon: ZelleIcon,
     accent: '#6D1ED4',
     bg: '#F3E5F5',
     copyAmount: true,
-    // Zelle has no public deep link — it lives inside bank apps.
-    // We copy the amount and send the user to Zelle's website instead.
     getUrl: () => 'https://www.zellepay.com/',
     toast: (amount) => `Copied $${amount} — paste in your bank's Zelle`,
   },
   {
     id: 'applepay',
     name: 'Apple Pay',
-    icon: <ApplePayIcon />,
+    Icon: ApplePayIcon,
     accent: '#1A1A1A',
     bg: '#F5F5F5',
-    copyAmount: false,   // amount is included in the iMessage text instead
-    // sms: URL scheme opens iMessage with a pre-written text body.
-    // encodeURIComponent() encodes spaces and special chars for URLs.
+    copyAmount: false,
     getUrl: (_, amount) =>
       `sms:?body=${encodeURIComponent(`Here's my gas share: $${amount}`)}`,
     toast: () => 'Opening iMessage — select a contact and tap send',
@@ -193,7 +186,7 @@ export default function PaymentButtons({ amount, venmoHandle, cashAppHandle, zel
             // aria-label gives screen readers a meaningful description
             aria-label={`Send $${amount} via ${method.name}`}
           >
-            <span className="pay-icon">{method.icon}</span>
+            <span className="pay-icon"><method.Icon /></span>
             <span className="pay-name">{method.name}</span>
             <span className="pay-amount">${amount}</span>
           </button>
