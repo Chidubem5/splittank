@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { getYears, getMakes, getModels, getOptions, getVehicleMPG } from './api/fuelEconomy'
 import { STATE_GAS_PRICES } from './data/gasPrices'
-import { fetchStateGasPrice } from './api/gasPrice'
+import { fetchStateGasPrice, normalizeCounty } from './api/gasPrice'
+import { fetchCounties } from './api/counties'
 import RoadHero from './components/RoadHero'
 import RoadGallery from './components/RoadGallery'
 import PaymentButtons from './components/PaymentButtons'
@@ -18,6 +19,7 @@ export default function App() {
   const [gasPrice, setGasPrice] = useState('')
   const [customGas, setCustomGas] = useState(false)
   const [livePriceDate, setLivePriceDate] = useState(null)
+  const [livePriceLabel, setLivePriceLabel] = useState(null)
 
   // Car - API cascade
   const [years, setYears] = useState([])
@@ -48,6 +50,11 @@ export default function App() {
   const [cashAppHandle, setCashAppHandle] = useState('')
   const [zelleContact, setZelleContact] = useState('')
   const [appleContact, setAppleContact] = useState('')
+
+  // County
+  const [county, setCounty] = useState('')
+  const [counties, setCounties] = useState([])
+  const [loadingCounties, setLoadingCounties] = useState(false)
 
   // Geolocation
   const [detectingLocation, setDetectingLocation] = useState(false)
@@ -102,6 +109,31 @@ export default function App() {
     setVenmoHandle(''); setCashAppHandle('')
     setZelleContact(''); setAppleContact('')
   }
+
+  function formatEIADate(period) {
+    if (!period) return null
+    const [y, m, d] = period.split('-').map(Number)
+    return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  }
+
+  // Load county list whenever state changes
+  useEffect(() => {
+    setCounty('')
+    setCounties([])
+    if (!state) return
+    setLoadingCounties(true)
+    fetchCounties(state)
+      .then(list => { setCounties(list); setLoadingCounties(false) })
+      .catch(() => setLoadingCounties(false))
+  }, [state])
+
+  // When counties load, try to auto-select the GPS-detected county
+  useEffect(() => {
+    if (!detectedLocation?.county || counties.length === 0 || county) return
+    const detected = normalizeCounty(detectedLocation.county)
+    const match = counties.find(c => normalizeCounty(c) === detected)
+    if (match) setCounty(match)
+  }, [counties, detectedLocation])
 
   function detectLocation() {
     if (!navigator.geolocation) {
@@ -211,19 +243,21 @@ export default function App() {
       .finally(() => setLoadingMpg(false))
   }, [optionId])
 
-  // Auto-fill gas price when state changes (unless user already customized it)
+  // Auto-fill gas price when state or county changes (unless user already customized it)
   useEffect(() => {
     if (!state || customGas) return
     setLivePriceDate(null)
-    fetchStateGasPrice(state).then(live => {
-      if (live) {
-        setGasPrice(live.toFixed(2))
-        setLivePriceDate(new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }))
+    setLivePriceLabel(null)
+    fetchStateGasPrice(state, county || null).then(result => {
+      if (result) {
+        setGasPrice(result.price.toFixed(2))
+        setLivePriceDate(formatEIADate(result.period))
+        setLivePriceLabel(result.label ?? null)
       } else {
         setGasPrice(STATE_GAS_PRICES[state]?.toFixed(2) ?? '')
       }
     })
-  }, [state])
+  }, [state, county])
 
   const activeMpg = () => {
     if (showManual && manualMpg) return parseFloat(manualMpg)
@@ -392,18 +426,39 @@ export default function App() {
             )}
           </div>
 
+          {state && (
+            <div className="field">
+              <label>County</label>
+              <select
+                value={county}
+                onChange={e => setCounty(e.target.value)}
+                disabled={loadingCounties}
+              >
+                <option value="">
+                  {loadingCounties ? 'Loading…' : 'All counties (state average)'}
+                </option>
+                {counties.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+              {county && livePriceLabel && (
+                <p className="county-note">📍 Using {livePriceLabel} prices</p>
+              )}
+            </div>
+          )}
+
           <div className="field">
             <label>
               Gas price ($/gal)
               {state && !customGas && (
                 <span className="badge">
-                  {livePriceDate ? `Live · ${livePriceDate}` : 'State avg'}
+                  {livePriceDate
+                    ? `Live · ${livePriceDate}${livePriceLabel ? ` · ${livePriceLabel}` : ''}`
+                    : 'State avg'}
                 </span>
               )}
             </label>
-            {detectedLocation?.county && !customGas && (
+            {(county || detectedLocation?.county) && !customGas && !livePriceLabel && (
               <p className="county-note">
-                📍 {detectedLocation.county} — using {detectedLocation.state} weekly average.
+                📍 {county || detectedLocation.county} — using {state} weekly average.
                 Tap the price to enter your local pump price.
               </p>
             )}
@@ -420,10 +475,12 @@ export default function App() {
                 <button className="reset-btn" onClick={() => {
                   setCustomGas(false)
                   setLivePriceDate(null)
-                  fetchStateGasPrice(state).then(live => {
-                    if (live) {
-                      setGasPrice(live.toFixed(2))
-                      setLivePriceDate(new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }))
+                  setLivePriceLabel(null)
+                  fetchStateGasPrice(state, county || null).then(result => {
+                    if (result) {
+                      setGasPrice(result.price.toFixed(2))
+                      setLivePriceDate(formatEIADate(result.period))
+                      setLivePriceLabel(result.label ?? null)
                     } else {
                       setGasPrice(STATE_GAS_PRICES[state]?.toFixed(2) ?? '')
                     }
