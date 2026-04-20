@@ -889,7 +889,7 @@ select:disabled { opacity: 0.4; cursor: not-allowed; }
 }
 .road-hero svg {
   width: 100%;
-  height: 100%; /* fill the fixed container completely */
+  height: 220px; /* explicit height matches container — guarantees edge-to-edge fill */
   display: block;
 }
 
