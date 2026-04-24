@@ -130,6 +130,12 @@ const COUNTY_METRO = {
   'thurston|Washington': 'Y48SE',
 }
 
+// States that have at least one county mapped to a metro area price.
+// Used by the UI to decide whether to show the county dropdown at all.
+export const METRO_STATES = new Set(
+  Object.keys(COUNTY_METRO).map(k => k.split('|')[1])
+)
+
 // ─────────────────────────────────────────
 // normalizeCounty
 // Strips the suffix word ("County", "Parish", "Borough", etc.) and lowercases

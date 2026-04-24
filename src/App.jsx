@@ -12,7 +12,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { getYears, getMakes, getModels, getOptions, getVehicleMPG } from './api/fuelEconomy'
 import { STATE_GAS_PRICES } from './data/gasPrices'
-import { fetchStateGasPrice, normalizeCounty } from './api/gasPrice'
+import { fetchStateGasPrice, normalizeCounty, METRO_STATES } from './api/gasPrice'
 import { fetchCounties } from './api/counties'
 import RoadHero from './components/RoadHero'
 import RoadGallery from './components/RoadGallery'
@@ -653,9 +653,10 @@ export default function App() {
             )}
           </div>
 
-          {/* County dropdown — only appears after a state is selected.
-              The county-field class triggers the slide-in animation. */}
-          {state && (
+          {/* County dropdown — only shown for states with metro-level EIA data.
+              For all other states every county maps to the same regional average,
+              so the dropdown would be decorative noise. */}
+          {state && METRO_STATES.has(state) && (
             <div className="field county-field">
               <label>County</label>
               <select
