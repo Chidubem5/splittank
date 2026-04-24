@@ -318,7 +318,7 @@ export default function App() {
     if (!year) return
     setMake(''); setMakes([]); setModel(''); setModels([])
     setOptions([]); setOptionId(''); setOptionText(''); setMpgData(null); setCarError('')
-    if (!years.includes(Number(year))) return
+    if (!years.includes(year)) return
     setLoadingMakes(true)
     getMakes(year)
       .then(setMakes)
