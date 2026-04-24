@@ -48,6 +48,7 @@ export default function App() {
   const [model,         setModel]         = useState('')
   const [options,       setOptions]       = useState([])    // trim/engine variants
   const [optionId,      setOptionId]      = useState('')    // selected trim's numeric ID
+  const [optionText,    setOptionText]    = useState('')    // display text for typeable trim field
   const [mpgData,       setMpgData]       = useState(null)  // { city, highway, combined }
   const [mpgType,       setMpgType]       = useState('combined') // which MPG tab is active
   const [loadingMpg,    setLoadingMpg]    = useState(false)
@@ -61,12 +62,22 @@ export default function App() {
   const [passengers,    setPassengers]   = useState(1)       // number of passengers (not driver)
   const [splitMode,     setSplitMode]    = useState('even')  // 'even' or 'cover'
 
-  // ── Driver payment handles ────────────────────────────────────────────────
-  // Optional — filled in so passengers get a direct pay link
-  const [venmoHandle,    setVenmoHandle]    = useState('')
-  const [cashAppHandle,  setCashAppHandle]  = useState('')
-  const [zelleContact,   setZelleContact]   = useState('')
-  const [appleContact,   setAppleContact]   = useState('')
+  // ── Driver payment handles (arrays to support multiple contacts per method) ─
+  const [venmoHandles,   setVenmoHandles]   = useState([''])
+  const [cashAppHandles, setCashAppHandles] = useState([''])
+  const [zelleContacts,  setZelleContacts]  = useState([''])
+  const [appleContacts,  setAppleContacts]  = useState([''])
+
+  // ── Passenger contacts (for sending payment requests via SMS) ─────────────
+  const [passengerContacts, setPassengerContacts] = useState([])
+
+  // ── Route / address lookup ────────────────────────────────────────────────
+  const [tripFrom,     setTripFrom]     = useState('')
+  const [tripTo,       setTripTo]       = useState('')
+  const [routeLoading, setRouteLoading] = useState(false)
+  const [routeError,   setRouteError]   = useState('')
+  const [cityRatio,    setCityRatio]    = useState(null) // 0–1 fraction that is city driving; null = not calculated
+  const [showRoute,    setShowRoute]    = useState(false)
 
   // ── County state ──────────────────────────────────────────────────────────
   const [county,         setCounty]         = useState('')   // selected county name
@@ -125,10 +136,10 @@ export default function App() {
       setManualMpg('')
     }
     // Pre-fill all payment handles from their profile
-    setVenmoHandle(friend.payment?.venmoHandle   || '')
-    setCashAppHandle(friend.payment?.cashAppHandle || '')
-    setZelleContact(friend.payment?.zelleContact   || '')
-    setAppleContact(friend.payment?.appleContact   || '')
+    setVenmoHandles([friend.payment?.venmoHandle   || ''])
+    setCashAppHandles([friend.payment?.cashAppHandle || ''])
+    setZelleContacts([friend.payment?.zelleContact   || ''])
+    setAppleContacts([friend.payment?.appleContact   || ''])
   }
 
   // Clear the friend driver selection and reset car/payment fields
@@ -136,8 +147,79 @@ export default function App() {
     setDriverFriend(null)
     setMpgData(null)
     setYear(''); setMake(''); setModel('')
-    setVenmoHandle(''); setCashAppHandle('')
-    setZelleContact(''); setAppleContact('')
+    setVenmoHandles(['']); setCashAppHandles([''])
+    setZelleContacts(['']); setAppleContacts([''])
+  }
+
+  // ── Contact array helpers ─────────────────────────────────────────────────
+  function addContact(setter)         { setter(prev => [...prev, '']) }
+  function removeContact(setter, idx) { setter(prev => prev.filter((_, i) => i !== idx)) }
+  function updateContact(setter, idx, val) {
+    setter(prev => prev.map((v, i) => i === idx ? val : v))
+  }
+
+  // ── Route calculator ──────────────────────────────────────────────────────
+  async function fetchRoute() {
+    if (!tripFrom.trim() || !tripTo.trim()) return
+    setRouteLoading(true)
+    setRouteError('')
+    setCityRatio(null)
+    try {
+      const [fromRes, toRes] = await Promise.all([
+        fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(tripFrom)}&format=json&limit=1`, { headers: { 'Accept-Language': 'en' } }),
+        fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(tripTo)}&format=json&limit=1`,   { headers: { 'Accept-Language': 'en' } }),
+      ])
+      const [fromData, toData] = await Promise.all([fromRes.json(), toRes.json()])
+      if (!fromData?.[0] || !toData?.[0]) {
+        setRouteError("Couldn't find one or both addresses. Try adding a city or state.")
+        return
+      }
+      const routeRes = await fetch(
+        `https://router.project-osrm.org/route/v1/driving/${fromData[0].lon},${fromData[0].lat};${toData[0].lon},${toData[0].lat}?overview=false&annotations=speed,distance`
+      )
+      const routeData = await routeRes.json()
+      if (routeData.code !== 'Ok' || !routeData.routes?.[0]) {
+        setRouteError("Couldn't find a driving route between those addresses.")
+        return
+      }
+      const route = routeData.routes[0]
+      setMiles((route.distance / 1609.34).toFixed(1))
+      // Calculate city/highway split: segments with speed > 22 m/s (~50 mph) = highway
+      let hwyMeters = 0, totalMeters = 0
+      route.legs.forEach(leg => {
+        const ann = leg.annotation
+        if (!ann?.speed || !ann?.distance) return
+        ann.speed.forEach((s, i) => {
+          const d = ann.distance[i] ?? 0
+          totalMeters += d
+          if (s > 22) hwyMeters += d
+        })
+      })
+      if (totalMeters > 0) setCityRatio(1 - hwyMeters / totalMeters)
+    } catch {
+      setRouteError('Route lookup failed. Try entering miles manually.')
+    } finally {
+      setRouteLoading(false)
+    }
+  }
+
+  // ── Sync contacts (Web Contact Picker API — iOS/Android only) ────────────
+  async function syncContacts() {
+    if (!navigator.contacts?.select) {
+      alert('Contact picker works on iOS Safari 14.5+ and Android Chrome. Enter contacts manually above.')
+      return
+    }
+    try {
+      const picked = await navigator.contacts.select(['name', 'tel', 'email'], { multiple: true })
+      if (!picked?.length) return
+      const phones = [...new Set(picked.flatMap(c => (c.tel  || []).map(t => t.trim()).filter(Boolean)))]
+      const emails = [...new Set(picked.flatMap(c => (c.email || []).map(e => e.trim()).filter(Boolean)))]
+      if (phones.length || emails.length) {
+        setZelleContacts([...phones, ...emails])
+        if (phones.length) setAppleContacts(phones)
+      }
+      setPassengerContacts(picked.map(c => ({ name: c.name?.[0] || 'Passenger', tel: c.tel?.[0] || null })))
+    } catch { /* user cancelled */ }
   }
 
   // Convert an EIA period string like "2026-04-14" into a readable "Apr 14"
@@ -235,42 +317,45 @@ export default function App() {
   useEffect(() => {
     if (!year) return
     setMake(''); setMakes([]); setModel(''); setModels([])
-    setOptions([]); setOptionId(''); setMpgData(null); setCarError('')
+    setOptions([]); setOptionId(''); setOptionText(''); setMpgData(null); setCarError('')
+    if (!years.includes(Number(year))) return
     setLoadingMakes(true)
     getMakes(year)
       .then(setMakes)
       .catch(() => setCarError('Could not load makes.'))
       .finally(() => setLoadingMakes(false))
-  }, [year])
+  }, [year, years])
 
   // When the user picks a make, clear downstream selections and load models.
   useEffect(() => {
-    if (!make) return
-    setModel(''); setModels([]); setOptions([]); setOptionId(''); setMpgData(null); setCarError('')
+    if (!make || !makes.includes(make)) return
+    setModel(''); setModels([]); setOptions([]); setOptionId(''); setOptionText(''); setMpgData(null); setCarError('')
     setLoadingModels(true)
     getModels(year, make)
       .then(setModels)
       .catch(() => setCarError('Could not load models.'))
       .finally(() => setLoadingModels(false))
-  }, [make])
+  }, [make, makes])
 
   // When the user picks a model, load the trim/engine options.
   // If there's only one option, auto-select it (no need to show a dropdown).
   useEffect(() => {
-    if (!model) return
-    setOptions([]); setOptionId(''); setMpgData(null); setCarError('')
+    if (!model || !models.includes(model)) return
+    setOptions([]); setOptionId(''); setOptionText(''); setMpgData(null); setCarError('')
     setLoadingMpg(true)
     getOptions(year, make, model)
       .then(opts => {
         setOptions(opts)
-        if (opts.length === 1) setOptionId(opts[0].value)  // auto-select if only one trim
-        else setLoadingMpg(false)
+        if (opts.length === 1) {
+          setOptionId(opts[0].value)
+          setOptionText(opts[0].text)
+        } else setLoadingMpg(false)
       })
       .catch(() => {
         setCarError('Could not load trims.')
         setLoadingMpg(false)
       })
-  }, [model])
+  }, [model, models])
 
   // When a specific trim option is selected (or auto-selected), fetch its MPG.
   useEffect(() => {
@@ -321,18 +406,30 @@ export default function App() {
   // This is an IIFE (Immediately Invoked Function Expression): (() => { ... })()
   // It runs immediately and its return value becomes liveResult.
   const liveResult = (() => {
-    const m   = parseFloat(miles)
-    const gp  = parseFloat(gasPrice)
-    const mpg = activeMpg()
-    if (!m || !gp || !mpg) return null   // missing inputs — show placeholder
+    const m  = parseFloat(miles)
+    const gp = parseFloat(gasPrice)
+    if (!m || !gp) return null
 
-    const gallons   = m / mpg
+    let gallons, mpg
+
+    if (cityRatio !== null && mpgData?.city && mpgData?.highway && !showManual) {
+      // City/highway split from route calculation
+      const cityM = m * cityRatio
+      const hwyM  = m * (1 - cityRatio)
+      gallons = cityM / mpgData.city + hwyM / mpgData.highway
+      mpg = parseFloat((m / gallons).toFixed(1))
+    } else {
+      mpg = activeMpg()
+      if (!mpg) return null
+      gallons = m / mpg
+    }
+
     const totalCost = gallons * gp
     const perPerson = splitMode === 'even'
-      ? totalCost / (passengers + 1)   // driver + all passengers share equally
-      : totalCost / passengers          // passengers cover the full cost between them
+      ? totalCost / (passengers + 1)
+      : totalCost / passengers
 
-    return { gallons, totalCost, perPerson, passengers, splitMode, miles: m, mpg, gp }
+    return { gallons, totalCost, perPerson, passengers, splitMode, miles: m, mpg, gp, cityRatio }
   })()
 
   // Scroll the result card into view the first time a result appears.
@@ -442,6 +539,52 @@ export default function App() {
         <section className="card">
           <span className="section-title">Trip Details</span>
 
+          {/* Route calculator — geocodes two addresses and auto-fills miles */}
+          <div className="field">
+            <label>
+              Calculate from addresses
+              <button
+                type="button"
+                className="toggle-link"
+                onClick={() => setShowRoute(r => !r)}
+              >
+                {showRoute ? 'hide' : 'show'}
+              </button>
+            </label>
+
+            {showRoute && (
+              <div className="route-fields">
+                <input
+                  type="text"
+                  placeholder="From — e.g. 123 Main St, Boston MA"
+                  value={tripFrom}
+                  onChange={e => { setTripFrom(e.target.value); setCityRatio(null) }}
+                />
+                <input
+                  type="text"
+                  placeholder="To — e.g. 456 Oak Ave, Providence RI"
+                  value={tripTo}
+                  onChange={e => { setTripTo(e.target.value); setCityRatio(null) }}
+                />
+                <button
+                  type="button"
+                  className="route-btn"
+                  onClick={fetchRoute}
+                  disabled={routeLoading || !tripFrom.trim() || !tripTo.trim()}
+                >
+                  {routeLoading ? 'Calculating…' : 'Get Route & Miles'}
+                </button>
+                {routeError && <p className="route-error">{routeError}</p>}
+                {cityRatio !== null && (
+                  <p className="route-split">
+                    📍 {Math.round((1 - cityRatio) * 100)}% highway · {Math.round(cityRatio * 100)}% city
+                    {mpgData?.city && mpgData?.highway && !showManual && ' — using split MPG for accuracy'}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+
           {/* Miles input */}
           <div className="field">
             <label>Miles driven</label>
@@ -449,7 +592,7 @@ export default function App() {
               type="number"
               placeholder="e.g. 150"
               value={miles}
-              onChange={e => setMiles(e.target.value)}
+              onChange={e => { setMiles(e.target.value); setCityRatio(null) }}
               min="0"
             />
           </div>
@@ -601,51 +744,73 @@ export default function App() {
             </div>
           )}
 
-          {/* Vehicle lookup dropdowns — hidden when a friend driver is selected */}
-          {!driverFriend && <div className="car-grid">
-            <div className="field">
-              <label>Year</label>
-              <select value={year} onChange={e => setYear(e.target.value)}>
-                <option value="">Year</option>
-                {years.map(y => <option key={y} value={y}>{y}</option>)}
-              </select>
-            </div>
+          {/* Vehicle lookup — typeable comboboxes (type or pick from dropdown) */}
+          {!driverFriend && (
+            <>
+              <div className="car-grid">
+                <div className="field">
+                  <label>Year</label>
+                  <input
+                    list="year-list"
+                    placeholder="e.g. 2022"
+                    value={year}
+                    onChange={e => setYear(e.target.value)}
+                  />
+                  <datalist id="year-list">
+                    {years.map(y => <option key={y} value={y} />)}
+                  </datalist>
+                </div>
 
-            <div className="field">
-              <label>Make</label>
-              {/* disabled until year is selected; shows "Loading..." while fetching */}
-              <select
-                value={make}
-                onChange={e => setMake(e.target.value)}
-                disabled={!year || loadingMakes}
-              >
-                <option value="">{loadingMakes ? 'Loading...' : 'Make'}</option>
-                {makes.map(m => <option key={m} value={m}>{m}</option>)}
-              </select>
-            </div>
+                <div className="field">
+                  <label>Make</label>
+                  <input
+                    list="make-list"
+                    placeholder={loadingMakes ? 'Loading…' : year ? 'e.g. Toyota' : 'Enter year first'}
+                    value={make}
+                    onChange={e => setMake(e.target.value)}
+                    disabled={!year || loadingMakes}
+                  />
+                  <datalist id="make-list">
+                    {makes.map(m => <option key={m} value={m} />)}
+                  </datalist>
+                </div>
 
-            <div className="field">
-              <label>Model</label>
-              <select
-                value={model}
-                onChange={e => setModel(e.target.value)}
-                disabled={!make || loadingModels}
-              >
-                <option value="">{loadingModels ? 'Loading...' : 'Model'}</option>
-                {models.map(m => <option key={m} value={m}>{m}</option>)}
-              </select>
-            </div>
-          </div>}
+                <div className="field">
+                  <label>Model</label>
+                  <input
+                    list="model-list"
+                    placeholder={loadingModels ? 'Loading…' : make ? 'e.g. Camry' : 'Enter make first'}
+                    value={model}
+                    onChange={e => setModel(e.target.value)}
+                    disabled={!make || loadingModels}
+                  />
+                  <datalist id="model-list">
+                    {models.map(m => <option key={m} value={m} />)}
+                  </datalist>
+                </div>
+              </div>
 
-          {/* Trim picker — only shown when a model has multiple trims */}
-          {!driverFriend && options.length > 1 && (
-            <div className="field">
-              <label>Trim / Engine</label>
-              <select value={optionId} onChange={e => setOptionId(e.target.value)}>
-                <option value="">Select trim...</option>
-                {options.map(o => <option key={o.value} value={o.value}>{o.text}</option>)}
-              </select>
-            </div>
+              {/* Trim picker — typeable, only shown when model has multiple trims */}
+              {options.length > 1 && (
+                <div className="field">
+                  <label>Trim / Engine</label>
+                  <input
+                    list="trim-list"
+                    placeholder="Type or select trim…"
+                    value={optionText}
+                    onChange={e => {
+                      const text = e.target.value
+                      setOptionText(text)
+                      const match = options.find(o => o.text === text)
+                      setOptionId(match ? match.value : '')
+                    }}
+                  />
+                  <datalist id="trim-list">
+                    {options.map(o => <option key={o.value} value={o.text} />)}
+                  </datalist>
+                </div>
+              )}
+            </>
           )}
 
           {!driverFriend && loadingMpg && <p className="loading-text">Loading vehicle data...</p>}
@@ -832,62 +997,131 @@ export default function App() {
               </p>
           }
 
-          {/* Payment handle inputs in a 2-column grid */}
+          {/* Payment handle inputs — each method supports multiple contacts */}
           <div className="payment-handles">
+
+            {/* Venmo */}
             <div className="field">
               <label>Venmo username</label>
-              <div className="handle-input-row">
-                <span className="handle-prefix venmo-prefix">@</span>
-                <input
-                  type="text"
-                  placeholder="username"
-                  value={venmoHandle}
-                  // .replace(/^@/, '') strips a leading @ if the user types one
-                  onChange={e => setVenmoHandle(e.target.value.replace(/^@/, ''))}
-                />
-              </div>
+              {venmoHandles.map((h, i) => (
+                <div className="handle-input-row multi-contact-row" key={i}>
+                  <span className="handle-prefix venmo-prefix">@</span>
+                  <input
+                    type="text"
+                    placeholder="username"
+                    value={h}
+                    onChange={e => updateContact(setVenmoHandles, i, e.target.value.replace(/^@/, ''))}
+                  />
+                  {venmoHandles.length > 1 && (
+                    <button type="button" className="remove-contact-btn" onClick={() => removeContact(setVenmoHandles, i)}>✕</button>
+                  )}
+                </div>
+              ))}
+              <button type="button" className="add-contact-btn" onClick={() => addContact(setVenmoHandles)}>+ add</button>
             </div>
+
+            {/* Cash App */}
             <div className="field">
               <label>Cash App $cashtag</label>
-              <div className="handle-input-row">
-                <span className="handle-prefix cashapp-prefix">$</span>
-                <input
-                  type="text"
-                  placeholder="cashtag"
-                  value={cashAppHandle}
-                  onChange={e => setCashAppHandle(e.target.value.replace(/^\$/, ''))}
-                />
-              </div>
+              {cashAppHandles.map((h, i) => (
+                <div className="handle-input-row multi-contact-row" key={i}>
+                  <span className="handle-prefix cashapp-prefix">$</span>
+                  <input
+                    type="text"
+                    placeholder="cashtag"
+                    value={h}
+                    onChange={e => updateContact(setCashAppHandles, i, e.target.value.replace(/^\$/, ''))}
+                  />
+                  {cashAppHandles.length > 1 && (
+                    <button type="button" className="remove-contact-btn" onClick={() => removeContact(setCashAppHandles, i)}>✕</button>
+                  )}
+                </div>
+              ))}
+              <button type="button" className="add-contact-btn" onClick={() => addContact(setCashAppHandles)}>+ add</button>
             </div>
+
+            {/* Zelle */}
             <div className="field">
               <label>Zelle</label>
-              <input
-                type="text"
-                placeholder="phone or email"
-                value={zelleContact}
-                onChange={e => setZelleContact(e.target.value)}
-              />
+              {zelleContacts.map((c, i) => (
+                <div className="multi-contact-row" key={i}>
+                  <input
+                    type="text"
+                    placeholder="phone or email"
+                    value={c}
+                    onChange={e => updateContact(setZelleContacts, i, e.target.value)}
+                  />
+                  {zelleContacts.length > 1 && (
+                    <button type="button" className="remove-contact-btn" onClick={() => removeContact(setZelleContacts, i)}>✕</button>
+                  )}
+                </div>
+              ))}
+              <button type="button" className="add-contact-btn" onClick={() => addContact(setZelleContacts)}>+ add</button>
             </div>
+
+            {/* Apple Pay */}
             <div className="field">
               <label>Apple Pay</label>
-              <input
-                type="text"
-                placeholder="phone number"
-                value={appleContact}
-                onChange={e => setAppleContact(e.target.value)}
-              />
+              {appleContacts.map((c, i) => (
+                <div className="multi-contact-row" key={i}>
+                  <input
+                    type="text"
+                    placeholder="phone number"
+                    value={c}
+                    onChange={e => updateContact(setAppleContacts, i, e.target.value)}
+                  />
+                  {appleContacts.length > 1 && (
+                    <button type="button" className="remove-contact-btn" onClick={() => removeContact(setAppleContacts, i)}>✕</button>
+                  )}
+                </div>
+              ))}
+              <button type="button" className="add-contact-btn" onClick={() => addContact(setAppleContacts)}>+ add</button>
             </div>
           </div>
+
+          {/* Sync Contacts button — fills Zelle/Apple Pay from phone contacts & stores passengers */}
+          <button type="button" className="sync-contacts-btn" onClick={syncContacts}>
+            📇 Sync Contacts
+          </button>
 
           {/* PaymentButtons only renders when there's a result to pay for */}
           {liveResult && (
             <PaymentButtons
               amount={liveResult.perPerson.toFixed(2)}
-              venmoHandle={venmoHandle}
-              cashAppHandle={cashAppHandle}
-              zelleContact={zelleContact}
-              appleContact={appleContact}
+              venmoHandle={venmoHandles.find(h => h.trim()) || ''}
+              cashAppHandle={cashAppHandles.find(h => h.trim()) || ''}
+              zelleContact={zelleContacts.find(c => c.trim()) || ''}
+              appleContact={appleContacts.find(c => c.trim()) || ''}
             />
+          )}
+
+          {/* Passenger payment requests — shown after syncing contacts */}
+          {passengerContacts.length > 0 && liveResult && (
+            <div className="passenger-requests">
+              <p className="passenger-requests-label">Send payment requests to passengers:</p>
+              {passengerContacts.map((contact, i) => {
+                if (!contact.tel) return null
+                const amount  = liveResult.perPerson.toFixed(2)
+                const handle  = venmoHandles.find(h => h.trim()) || ''
+                const payLink = handle
+                  ? `https://venmo.com/u/${handle}?txn=pay&amount=${amount}&note=Gas`
+                  : cashAppHandles.find(h => h.trim())
+                    ? `https://cash.app/$${cashAppHandles.find(h => h.trim())}/${amount}`
+                    : null
+                const body = payLink
+                  ? `Hey ${contact.name}, you owe $${amount} for gas! Pay here: ${payLink}`
+                  : `Hey ${contact.name}, you owe $${amount} for gas!`
+                return (
+                  <a
+                    key={i}
+                    className="passenger-request-btn"
+                    href={`sms:${contact.tel}?body=${encodeURIComponent(body)}`}
+                  >
+                    💬 Message {contact.name} — ${amount}
+                  </a>
+                )
+              })}
+            </div>
           )}
         </section>
       </main>
