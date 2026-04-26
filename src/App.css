@@ -214,25 +214,47 @@ body {
   border-radius: 6px;
   margin-bottom: 16px;
 }
+.section-header .section-title {
+  margin-bottom: 0;
+}
 
-/* Round trip toggle */
+/* Flex row that holds .section-title and optional inline controls (e.g. round-trip toggle) */
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+/* Round trip pill badge — visually matches .section-title shape */
 .round-trip-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--text);
+  gap: 0;
+  font-size: 0.7rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
   cursor: pointer;
-  margin-bottom: 18px;
   user-select: none;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1.5px solid var(--blue);
+  color: var(--blue);
+  background: transparent;
+  transition: background 0.15s, color 0.15s;
 }
 .round-trip-toggle input[type="checkbox"] {
-  width: 18px;
-  height: 18px;
-  accent-color: var(--blue);
-  cursor: pointer;
-  flex-shrink: 0;
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+.round-trip-toggle:has(input:checked) {
+  background: var(--blue);
+  color: #fff;
+  border-color: var(--blue);
 }
 
 /* ═══════════════════════════════════════════

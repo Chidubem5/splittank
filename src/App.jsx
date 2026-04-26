@@ -608,17 +608,17 @@ out body;`,
 
         {/* ── TRIP DETAILS ──────────────────────────────────────────────────── */}
         <section className="card">
-          <span className="section-title">Trip Details</span>
-
-          {/* Round trip toggle */}
-          <label className="round-trip-toggle">
-            <input
-              type="checkbox"
-              checked={roundTrip}
-              onChange={e => setRoundTrip(e.target.checked)}
-            />
-            Round trip
-          </label>
+          <div className="section-header">
+            <span className="section-title">Trip Details</span>
+            <label className="round-trip-toggle">
+              <input
+                type="checkbox"
+                checked={roundTrip}
+                onChange={e => setRoundTrip(e.target.checked)}
+              />
+              Round trip
+            </label>
+          </div>
 
           {/* Route calculator — geocodes two addresses and auto-fills miles */}
           <div className="field">
