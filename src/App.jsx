@@ -1,19 +1,9 @@
-// App.jsx
-// The root component of Split Tank. This single file contains all the
-// main application logic and renders the full page layout.
-//
-// REACT FUNDAMENTALS PRESENT IN THIS FILE:
-//   useState   — stores a piece of data that, when changed, re-renders the UI
-//   useEffect  — runs side-effects (API calls, subscriptions) after renders
-//   useRef     — holds a mutable value that does NOT trigger re-renders
-//   Conditional rendering — {condition && <Component />} renders only if true
-//   Computed values — const x = someCalc() computed fresh on every render
-
 import { useState, useEffect, useRef } from 'react'
 import { getYears, getMakes, getModels, getOptions, getVehicleMPG } from './api/fuelEconomy'
 import { STATE_GAS_PRICES } from './data/gasPrices'
 import { fetchStateGasPrice, normalizeCounty, METRO_STATES } from './api/gasPrice'
 import { fetchCounties } from './api/counties'
+import Combobox from './components/Combobox'
 import RoadHero from './components/RoadHero'
 import RoadGallery from './components/RoadGallery'
 import PaymentButtons from './components/PaymentButtons'
@@ -26,8 +16,6 @@ import './App.css'
 export default function App() {
 
   // ── Trip state ────────────────────────────────────────────────────────────
-  // Each useState call creates [value, setter]. React re-renders the component
-  // whenever a setter is called with a new value.
   const [miles,         setMiles]         = useState('')    // miles driven
   const [state,         setState]         = useState('')    // US state name
   const [gasPrice,      setGasPrice]      = useState('')    // $/gallon
@@ -71,6 +59,9 @@ export default function App() {
   // ── Passenger contacts (for sending payment requests via SMS) ─────────────
   const [passengerContacts, setPassengerContacts] = useState([])
 
+  // ── Tolls ─────────────────────────────────────────────────────────────────
+  const [tolls, setTolls] = useState('')
+
   // ── Route / address lookup ────────────────────────────────────────────────
   const [tripFrom,     setTripFrom]     = useState('')
   const [tripTo,       setTripTo]       = useState('')
@@ -109,13 +100,9 @@ export default function App() {
 
   // ── Side effects ──────────────────────────────────────────────────────────
 
-  // Close the header dropdown menu when the user clicks anywhere outside it.
-  // useEffect with [] runs ONCE after the first render (like componentDidMount).
-  // The returned function is a "cleanup" — it runs when the component unmounts
-  // to prevent memory leaks from lingering event listeners.
+  // Close the header dropdown on outside click.
   useEffect(() => {
     function handleClick(e) {
-      // menuRef.current.contains(e.target) checks if the click was INSIDE the menu
       if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false)
     }
     document.addEventListener('mousedown', handleClick)
@@ -126,7 +113,6 @@ export default function App() {
   function applyDriverFriend(friend) {
     setDriverFriend(friend)
     if (friend.car) {
-      // Build an mpgData object from the friend's saved car data
       setMpgData({
         city:     friend.car.mpgCity     ?? null,
         highway:  friend.car.mpgHighway  ?? null,
@@ -304,16 +290,14 @@ export default function App() {
     )
   }
 
-  // Load the list of model years when the app first loads.
-  // No dependency array items = only runs once on mount.
+  // Load the list of model years once on mount.
   useEffect(() => {
     getYears()
       .then(setYears)
       .catch(() => setCarError('Could not load vehicle data. Enter MPG manually below.'))
   }, [])
 
-  // When the user picks a year, clear downstream selections and load makes.
-  // [year] = this effect re-runs only when `year` changes.
+  // Year → fetch makes; clear everything downstream.
   useEffect(() => {
     if (!year) return
     setMake(''); setMakes([]); setModel(''); setModels([])
@@ -326,7 +310,7 @@ export default function App() {
       .finally(() => setLoadingMakes(false))
   }, [year, years])
 
-  // When the user picks a make, clear downstream selections and load models.
+  // Make → fetch models; clear everything downstream.
   useEffect(() => {
     if (!make || !makes.includes(make)) return
     setModel(''); setModels([]); setOptions([]); setOptionId(''); setOptionText(''); setMpgData(null); setCarError('')
@@ -337,8 +321,7 @@ export default function App() {
       .finally(() => setLoadingModels(false))
   }, [make, makes])
 
-  // When the user picks a model, load the trim/engine options.
-  // If there's only one option, auto-select it (no need to show a dropdown).
+  // Model → fetch trims; auto-select if only one exists.
   useEffect(() => {
     if (!model || !models.includes(model)) return
     setOptions([]); setOptionId(''); setOptionText(''); setMpgData(null); setCarError('')
@@ -357,7 +340,7 @@ export default function App() {
       })
   }, [model, models])
 
-  // When a specific trim option is selected (or auto-selected), fetch its MPG.
+  // Trim selected → fetch MPG.
   useEffect(() => {
     if (!optionId) return
     setLoadingMpg(true)
@@ -392,19 +375,12 @@ export default function App() {
   }, [state, county])
 
   // ── Computed values ───────────────────────────────────────────────────────
-  // These are recalculated on every render. No state needed since they depend
-  // entirely on state values already tracked above.
-
-  // Return the active MPG value based on whether manual mode is on and which tab
   const activeMpg = () => {
     if (showManual && manualMpg) return parseFloat(manualMpg)
     if (!mpgData) return null
     return mpgData[mpgType] ?? null   // mpgType is 'city', 'highway', or 'combined'
   }
 
-  // The main calculation — returns null if any required input is missing.
-  // This is an IIFE (Immediately Invoked Function Expression): (() => { ... })()
-  // It runs immediately and its return value becomes liveResult.
   const liveResult = (() => {
     const m  = parseFloat(miles)
     const gp = parseFloat(gasPrice)
@@ -424,23 +400,20 @@ export default function App() {
       gallons = m / mpg
     }
 
-    const totalCost = gallons * gp
+    const tollAmount = parseFloat(tolls) || 0
+    const gasCost   = gallons * gp
+    const totalCost = gasCost + tollAmount
     const perPerson = splitMode === 'even'
       ? totalCost / (passengers + 1)
       : totalCost / passengers
 
-    return { gallons, totalCost, perPerson, passengers, splitMode, miles: m, mpg, gp, cityRatio }
+    return { gallons, gasCost, tollAmount, totalCost, perPerson, passengers, splitMode, miles: m, mpg, gp, cityRatio }
   })()
 
   // Scroll the result card into view the first time a result appears.
   useEffect(() => {
     if (liveResult) resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
   }, [liveResult !== null]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ── JSX ───────────────────────────────────────────────────────────────────
-  // JSX looks like HTML but is actually JavaScript. Each tag is a function call.
-  // className is used instead of class (class is a reserved JS keyword).
-  // {expression} inside JSX evaluates JavaScript and renders the result.
 
   return (
     <div className="app">
@@ -469,11 +442,9 @@ export default function App() {
                     <span className="user-display-name">
                       {currentUser.displayName?.split(' ')[0] || 'Account'}
                     </span>
-                    {/* ▲ / ▼ chevron changes based on whether menu is open */}
                     <span className="chevron">{menuOpen ? '▲' : '▼'}</span>
                   </button>
 
-                  {/* Dropdown menu — only rendered when menuOpen is true */}
                   {menuOpen && (
                     <div className="user-dropdown">
                       <button onClick={() => { setShowProfile(true); setMenuOpen(false) }}>
@@ -735,7 +706,7 @@ export default function App() {
 
         {/* ── THE CAR ───────────────────────────────────────────────────────── */}
         <section className="card">
-          <span className="section-title">The Car</span>
+          <span className="section-title">The Car (Mileage)</span>
 
           {/* If a friend is pre-selected as driver, show their car as a summary */}
           {driverFriend?.car && (
@@ -751,43 +722,34 @@ export default function App() {
               <div className="car-grid">
                 <div className="field">
                   <label>Year</label>
-                  <input
-                    list="year-list"
-                    placeholder="e.g. 2022"
+                  <Combobox
+                    options={years.map(String)}
                     value={year}
-                    onChange={e => setYear(e.target.value)}
+                    onChange={setYear}
+                    placeholder="e.g. 2022"
                   />
-                  <datalist id="year-list">
-                    {years.map(y => <option key={y} value={y} />)}
-                  </datalist>
                 </div>
 
                 <div className="field">
                   <label>Make</label>
-                  <input
-                    list="make-list"
-                    placeholder={loadingMakes ? 'Loading…' : year ? 'e.g. Toyota' : 'Enter year first'}
+                  <Combobox
+                    options={makes}
                     value={make}
-                    onChange={e => setMake(e.target.value)}
+                    onChange={setMake}
+                    placeholder={loadingMakes ? 'Loading…' : year ? 'e.g. Toyota' : 'Enter year first'}
                     disabled={!year || loadingMakes}
                   />
-                  <datalist id="make-list">
-                    {makes.map(m => <option key={m} value={m} />)}
-                  </datalist>
                 </div>
 
                 <div className="field">
                   <label>Model</label>
-                  <input
-                    list="model-list"
-                    placeholder={loadingModels ? 'Loading…' : make ? 'e.g. Camry' : 'Enter make first'}
+                  <Combobox
+                    options={models}
                     value={model}
-                    onChange={e => setModel(e.target.value)}
+                    onChange={setModel}
+                    placeholder={loadingModels ? 'Loading…' : make ? 'e.g. Camry' : 'Enter make first'}
                     disabled={!make || loadingModels}
                   />
-                  <datalist id="model-list">
-                    {models.map(m => <option key={m} value={m} />)}
-                  </datalist>
                 </div>
               </div>
 
@@ -795,20 +757,16 @@ export default function App() {
               {options.length > 1 && (
                 <div className="field">
                   <label>Trim / Engine</label>
-                  <input
-                    list="trim-list"
-                    placeholder="Type or select trim…"
+                  <Combobox
+                    options={options.map(o => o.text)}
                     value={optionText}
-                    onChange={e => {
-                      const text = e.target.value
+                    onChange={text => {
                       setOptionText(text)
                       const match = options.find(o => o.text === text)
                       setOptionId(match ? match.value : '')
                     }}
+                    placeholder="Type or select trim…"
                   />
-                  <datalist id="trim-list">
-                    {options.map(o => <option key={o.value} value={o.text} />)}
-                  </datalist>
                 </div>
               )}
             </>
@@ -867,16 +825,33 @@ export default function App() {
           </div>
         </section>
 
+        {/* ── TOLLS ────────────────────────────────────────────────────────── */}
+        <section className="card">
+          <span className="section-title">Tolls</span>
+          <p className="payment-info-hint">
+            Optional — add any toll costs for this trip. You can look these up in
+            Google Maps before you leave.
+          </p>
+          <div className="field">
+            <label>Total tolls ($)</label>
+            <input
+              type="number"
+              step="0.25"
+              placeholder="e.g. 8.50"
+              value={tolls}
+              onChange={e => setTolls(e.target.value)}
+              min="0"
+            />
+          </div>
+        </section>
+
         {/* ── THE TOTAL ─────────────────────────────────────────────────────── */}
-        {/* ref={resultRef} attaches a DOM reference so we can scrollIntoView it */}
         <section className="card result-card" ref={resultRef}>
           <span className="section-title">The Total</span>
 
-          {/* Passenger counter */}
           <div className="field">
             <label>Passengers (not counting the driver)</label>
             <div className="counter-row">
-              {/* Math.max(1, p - 1) prevents going below 1 passenger */}
               <button
                 className="counter-btn"
                 onClick={() => setPassengers(p => Math.max(1, p - 1))}
@@ -894,11 +869,9 @@ export default function App() {
             </div>
           </div>
 
-          {/* Split mode radio buttons */}
           <div className="field">
             <label>How should gas be split?</label>
             <div className="split-options">
-              {/* Each <label> wraps its <input> so clicking the text also selects it */}
               <label className={`split-option${splitMode === 'even' ? ' selected' : ''}`}>
                 <input
                   type="radio"
@@ -929,16 +902,21 @@ export default function App() {
           {/* Show results if all inputs are filled, otherwise show placeholder */}
           {liveResult ? (
             <>
-              {/* Stats grid: 4 summary numbers */}
               <div className="result-stats">
                 <div className="stat">
                   <span className="stat-label">Gas used</span>
                   <span className="stat-value">{liveResult.gallons.toFixed(2)} gal</span>
                 </div>
                 <div className="stat">
-                  <span className="stat-label">Total gas cost</span>
-                  <span className="stat-value">${liveResult.totalCost.toFixed(2)}</span>
+                  <span className="stat-label">{liveResult.tollAmount > 0 ? 'Gas cost' : 'Total gas cost'}</span>
+                  <span className="stat-value">${liveResult.gasCost.toFixed(2)}</span>
                 </div>
+                {liveResult.tollAmount > 0 && (
+                  <div className="stat">
+                    <span className="stat-label">Tolls</span>
+                    <span className="stat-value">${liveResult.tollAmount.toFixed(2)}</span>
+                  </div>
+                )}
                 <div className="stat">
                   <span className="stat-label">MPG used</span>
                   <span className="stat-value">{liveResult.mpg} mpg</span>
@@ -961,8 +939,6 @@ export default function App() {
                 </p>
               </div>
 
-              {/* Native share button — only available on iOS Safari and Android Chrome.
-                  navigator.share is undefined on desktop browsers, so we check first. */}
               {navigator.share && (
                 <button
                   className="share-btn"

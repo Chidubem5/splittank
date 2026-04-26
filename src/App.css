@@ -252,7 +252,9 @@ select:focus {
   box-shadow: 0 0 0 3px var(--blue-light);
 }
 
-select:disabled { opacity: 0.4; cursor: not-allowed; }
+select:disabled,
+input[type="text"]:disabled,
+input[type="number"]:disabled { opacity: 0.4; cursor: not-allowed; }
 
 /* ═══════════════════════════════════════════
    BADGE
@@ -409,6 +411,43 @@ select:disabled { opacity: 0.4; cursor: not-allowed; }
   grid-template-columns: 1fr 1fr 1fr;
   gap: 10px;
   margin-bottom: 14px;
+}
+
+/* ═══════════════════════════════════════════
+   COMBOBOX
+═══════════════════════════════════════════ */
+.combobox { position: relative; }
+
+.combobox input[type="text"] { width: 100%; }
+
+.combobox-list {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 200;
+  background: var(--card);
+  border: 1.5px solid var(--blue-dark);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+  list-style: none;
+  padding: 4px 0;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.combobox-option {
+  padding: 9px 13px;
+  font-size: 0.95rem;
+  color: var(--text);
+  cursor: pointer;
+  user-select: none;
+}
+
+.combobox-option.highlighted {
+  background: var(--blue-light);
+  color: var(--blue-dark);
+  font-weight: 600;
 }
 
 
@@ -725,10 +764,6 @@ select:disabled { opacity: 0.4; cursor: not-allowed; }
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
-}
-
-@media (max-width: 500px) {
-  .payment-handles { grid-template-columns: 1fr; }
 }
 
 .handle-input-row { display: flex; align-items: stretch; }
@@ -1218,66 +1253,150 @@ select:disabled { opacity: 0.4; cursor: not-allowed; }
   text-align: center;
   padding: 14px 16px;
   font-size: 0.72rem;
-  color: var(--text-muted);
   background: var(--text);
   color: rgba(255,255,255,0.4);
 }
 
 /* ═══════════════════════════════════════════
-   MOBILE — iOS optimized
+   MOBILE — iOS / Android optimized
 ═══════════════════════════════════════════ */
 @media (max-width: 600px) {
-  .app-header { padding: 12px 16px; }
-  .app-header h1 { font-size: 1.55rem; }
-  .app-header p  { font-size: 0.75rem; }
+  /* ── Header ── */
+  .app-header { padding: 13px 16px; }
+  .app-header h1 { font-size: 1.6rem; }
+  .app-header p  { font-size: 0.77rem; }
 
+  /* ── Layout ── */
   .app-main {
-    padding: 14px 12px 64px;
-    padding-bottom: max(64px, calc(48px + env(safe-area-inset-bottom)));
-    gap: 12px;
+    padding: 14px 14px 80px;
+    padding-bottom: max(80px, calc(64px + env(safe-area-inset-bottom)));
+    gap: 13px;
   }
 
-  .card { padding: 16px; border-radius: 14px; }
+  /* ── Cards ── */
+  .card {
+    padding: 18px 16px;
+    border-radius: 16px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.07), 0 6px 20px rgba(0,0,0,0.06);
+  }
 
+  /* ── Typography ── */
+  .section-title {
+    font-size: 0.74rem;
+    padding: 5px 11px;
+    margin-bottom: 15px;
+  }
+  .field > label { font-size: 0.88rem; margin-bottom: 7px; }
+
+  /* ── Inputs & selects — 1rem prevents iOS auto-zoom, 48px for easy tapping ── */
   input[type="number"],
   input[type="text"],
   select {
-    padding: 13px;
+    padding: 13px 14px;
     font-size: 1rem;
     min-height: 48px;
+    border-radius: 10px;
   }
 
-  .counter-btn { width: 48px; height: 48px; font-size: 1.5rem; }
+  /* ── Combobox — bigger options for fat fingers ── */
+  .combobox-list { max-height: 264px; }
+  .combobox-option {
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    font-size: 1rem;
+    padding: 10px 14px;
+  }
 
-  .car-grid { grid-template-columns: 1fr 1fr; }
+  /* ── Car grid — year+make side by side, model full-width ── */
+  .car-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
   .car-grid .field:last-child { grid-column: 1 / -1; }
 
+  /* ── MPG display ── */
   .mpg-tabs { flex-wrap: wrap; }
+  .mpg-tab  { min-height: 44px; font-size: 0.88rem; }
+  .mpg-number { font-size: 2.6rem; }
 
-  .payment-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
-  .payment-btn  { padding: 10px 8px; gap: 6px; min-height: 52px; }
+  /* ── Passenger counter ── */
+  .counter-btn { width: 50px; height: 50px; font-size: 1.6rem; }
+  .counter-val { font-size: 2.2rem; }
+
+  /* ── Result ── */
+  .per-person-amount { font-size: 3.6rem; letter-spacing: -1px; }
+  .per-person-box    { padding: 28px 16px; }
+  .stat-value        { font-size: 1.2rem; }
+  .stat              { padding: 13px 10px; }
+
+  /* ── Payment buttons — full width rows on mobile ── */
+  .payment-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .payment-btn  { padding: 12px 10px; gap: 8px; min-height: 54px; }
   .pay-icon     { width: 26px; height: 26px; }
   .pay-icon svg { width: 26px; height: 26px; }
-  .pay-name     { font-size: 0.75rem; }
-  .pay-amount   { font-size: 0.8rem; }
+  .pay-name     { font-size: 0.8rem; }
+  .pay-amount   { font-size: 0.85rem; }
 
+  /* ── Payment handle inputs ── */
   .payment-handles { grid-template-columns: 1fr; }
+  .handle-input-row input,
+  .handle-prefix { min-height: 48px; }
 
-  .per-person-amount { font-size: 3rem; }
+  /* ── Action buttons ── */
+  .use-location-btn { font-size: 0.95rem; min-height: 54px; }
+  .reset-btn        { min-height: 48px; padding: 0 16px; }
+  .share-btn        { min-height: 50px; }
+  .sign-in-btn      { min-height: 42px; padding: 8px 16px; }
 
-  .use-location-btn { font-size: 0.95rem; min-height: 52px; }
+  /* ── Modals — slide up from bottom as a sheet ── */
+  .modal-overlay {
+    align-items: flex-end;
+    padding: 0;
+  }
+  .modal-box {
+    width: 100%;
+    max-width: 100%;
+    border-radius: 20px 20px 0 0;
+    max-height: 92vh;
+    padding: 28px 20px 24px;
+    padding-bottom: max(28px, calc(20px + env(safe-area-inset-bottom)));
+    animation: slideUp 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+  }
+  .modal-box--wide { max-width: 100%; }
+  .modal-save-btn,
+  .modal-signout-btn { min-height: 48px; }
 
+  /* ── Auth provider buttons ── */
+  .auth-provider-btn { min-height: 52px; }
+
+  /* ── Gallery ── */
   .road-gallery { padding: 20px 12px 28px; }
+  .road-gallery-inner { gap: 12px; }
 
-  /* Mobile: let the hero scale proportionally instead of fixed height */
+  /* ── Hero — proportional scaling on mobile ── */
   .road-hero { height: auto; }
-  .road-hero svg { height: auto; max-height: 220px; }
+  .road-hero svg { height: auto; max-height: 200px; }
 
+  /* ── Footer ── */
   .app-footer { padding-bottom: calc(14px + env(safe-area-inset-bottom)); }
 }
 
-@media (max-width: 380px) {
-  .per-person-amount { font-size: 2.4rem; }
+/* ── Slide-up animation for mobile modal sheet ── */
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+
+/* ── Very small phones (≤ 390px) ── */
+@media (max-width: 390px) {
+  .per-person-amount { font-size: 2.8rem; }
+  /* Stack all car fields single column — columns too narrow at this width */
+  .car-grid                    { grid-template-columns: 1fr; }
+  .car-grid .field:last-child  { grid-column: auto; }
+  /* Single-column payment grid for clarity */
+  .payment-grid { grid-template-columns: 1fr; }
+  .app-header h1 { font-size: 1.45rem; }
 }
 
 /* ── Toggle link (show/hide) ── */
