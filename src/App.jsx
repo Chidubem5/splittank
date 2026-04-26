@@ -60,7 +60,8 @@ export default function App() {
   const [passengerContacts, setPassengerContacts] = useState([])
 
   // ── Tolls ─────────────────────────────────────────────────────────────────
-  const [tolls, setTolls] = useState('')
+  const [tolls,          setTolls]          = useState('')
+  const [tollsEstimated, setTollsEstimated] = useState(false) // true when auto-filled from route
 
   // ── Route / address lookup ────────────────────────────────────────────────
   const [tripFrom,     setTripFrom]     = useState('')
@@ -170,6 +171,47 @@ export default function App() {
     return null
   }
 
+  // Queries OpenStreetMap for toll booths and electronic gantries along a route,
+  // clusters nearby points (so a multi-lane plaza counts once), and returns
+  // a rough dollar estimate ($1.25 per toll event).
+  async function estimateTolls(routeCoords) {
+    if (!routeCoords?.length) return null
+    const lats = routeCoords.map(c => c[1])
+    const lons = routeCoords.map(c => c[0])
+    const s = Math.min(...lats) - 0.05, n = Math.max(...lats) + 0.05
+    const w = Math.min(...lons) - 0.05, e = Math.max(...lons) + 0.05
+
+    const query = `[out:json][timeout:20];
+(
+  node["barrier"="toll_booth"](${s},${w},${n},${e});
+  node["barrier"="toll_gantry"](${s},${w},${n},${e});
+  node["highway"="toll_booth"](${s},${w},${n},${e});
+);
+out body;`
+    const res  = await fetch('https://overpass-api.de/api/interpreter', { method: 'POST', body: query })
+    const data = await res.json()
+    const all  = data.elements || []
+    if (!all.length) return 0
+
+    // Keep only toll points within ~500m of the actual route path.
+    const NEAR = 0.005
+    const near = all.filter(pt =>
+      routeCoords.some(([lon, lat]) =>
+        Math.abs(pt.lat - lat) < NEAR && Math.abs(pt.lon - lon) < NEAR
+      )
+    )
+
+    // Cluster: nearby booths in the same plaza count as one event.
+    const CLUSTER = 0.002
+    const events = []
+    for (const pt of near) {
+      if (!events.some(e => Math.abs(e.lat - pt.lat) < CLUSTER && Math.abs(e.lon - pt.lon) < CLUSTER))
+        events.push(pt)
+    }
+
+    return events.length > 0 ? parseFloat((events.length * 1.25).toFixed(2)) : 0
+  }
+
   async function fetchRoute() {
     if (!tripFrom.trim() || !tripTo.trim()) return
     setRouteLoading(true)
@@ -181,8 +223,10 @@ export default function App() {
         setRouteError("Couldn't find one or both locations. Try adding a city or state, or use a well-known landmark name.")
         return
       }
+      // overview=simplified gives us the route geometry for toll detection.
+      // annotations=speed,distance gives per-segment data for city/highway split.
       const routeRes = await fetch(
-        `https://router.project-osrm.org/route/v1/driving/${from.lon},${from.lat};${to.lon},${to.lat}?overview=false&annotations=speed,distance`
+        `https://router.project-osrm.org/route/v1/driving/${from.lon},${from.lat};${to.lon},${to.lat}?overview=simplified&geometries=geojson&annotations=speed,distance`
       )
       const routeData = await routeRes.json()
       if (routeData.code !== 'Ok' || !routeData.routes?.[0]) {
@@ -191,7 +235,8 @@ export default function App() {
       }
       const route = routeData.routes[0]
       setMiles((route.distance / 1609.34).toFixed(1))
-      // Calculate city/highway split: segments with speed > 22 m/s (~50 mph) = highway
+
+      // City/highway split from per-segment speed annotations.
       let hwyMeters = 0, totalMeters = 0
       route.legs.forEach(leg => {
         const ann = leg.annotation
@@ -203,6 +248,17 @@ export default function App() {
         })
       })
       if (totalMeters > 0) setCityRatio(1 - hwyMeters / totalMeters)
+
+      // Estimate tolls from the route geometry in the background.
+      const coords = route.geometry?.coordinates
+      if (coords?.length) {
+        estimateTolls(coords).then(amount => {
+          if (amount !== null) {
+            setTolls(amount > 0 ? String(amount) : '')
+            setTollsEstimated(amount > 0)
+          }
+        }).catch(() => {})
+      }
     } catch {
       setRouteError('Route lookup failed. Try entering miles manually.')
     } finally {
@@ -850,17 +906,21 @@ export default function App() {
         <section className="card">
           <span className="section-title">Tolls</span>
           <p className="payment-info-hint">
-            Optional — add any toll costs for this trip. You can look these up in
-            Google Maps before you leave.
+            {tollsEstimated
+              ? 'Auto-estimated from your route — edit if you know the exact amount.'
+              : 'Add any toll costs. Enter addresses above to auto-estimate, or check Google Maps.'}
           </p>
           <div className="field">
-            <label>Total tolls ($)</label>
+            <label>
+              Total tolls ($)
+              {tollsEstimated && <span className="badge">estimated</span>}
+            </label>
             <input
               type="number"
               step="0.25"
               placeholder="e.g. 8.50"
               value={tolls}
-              onChange={e => setTolls(e.target.value)}
+              onChange={e => { setTolls(e.target.value); setTollsEstimated(false) }}
               min="0"
             />
           </div>
