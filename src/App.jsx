@@ -874,11 +874,13 @@ out body;`,
                 <div className="field">
                   <label>Trim / Engine</label>
                   <Combobox
-                    options={options.map(o => o.text)}
+                    options={options.map((o, i) => i === 0 ? `${o.text} (Most Common)` : o.text)}
                     value={optionText}
                     onChange={text => {
                       setOptionText(text)
-                      const match = options.find(o => o.text === text)
+                      const match = options.find((o, i) =>
+                        text === (i === 0 ? `${o.text} (Most Common)` : o.text)
+                      )
                       setOptionId(match ? match.value : '')
                     }}
                     placeholder="Type or select trim…"
