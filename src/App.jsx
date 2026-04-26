@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { getYears, getMakes, getModels, getOptions, getVehicleMPG } from './api/fuelEconomy'
 import { STATE_GAS_PRICES } from './data/gasPrices'
 import { getTollRate }      from './data/tollRates'
+import { fetchTollInflationMultiplier } from './api/tollInflation'
 import { fetchStateGasPrice, normalizeCounty, METRO_STATES } from './api/gasPrice'
 import { fetchCounties } from './api/counties'
 import Combobox from './components/Combobox'
@@ -183,9 +184,9 @@ export default function App() {
     const s = Math.min(...lats) - 0.05, n = Math.max(...lats) + 0.05
     const w = Math.min(...lons) - 0.05, e = Math.max(...lons) + 0.05
 
-    // Fetch toll infrastructure and the state at the route midpoint in parallel.
+    // Fetch toll infrastructure, route midpoint state, and CPI multiplier in parallel.
     const mid = routeCoords[Math.floor(routeCoords.length / 2)]
-    const [overpassRes, geoRes] = await Promise.all([
+    const [overpassRes, geoRes, inflationMultiplier] = await Promise.all([
       fetch('https://overpass-api.de/api/interpreter', {
         method: 'POST',
         body: `[out:json][timeout:20];
@@ -200,16 +201,17 @@ out body;`,
         `https://nominatim.openstreetmap.org/reverse?lat=${mid[1]}&lon=${mid[0]}&format=json`,
         { headers: { 'Accept-Language': 'en' } }
       ).catch(() => null),
+      fetchTollInflationMultiplier(),
     ])
 
     const overpassData = await overpassRes.json()
     const all = overpassData.elements || []
     if (!all.length) return 0
 
-    // State-specific rate — falls back to national default if state is unknown.
+    // State-specific base rate adjusted for current CPI inflation.
     const geoData  = geoRes ? await geoRes.json().catch(() => null) : null
     const stateName = geoData?.address?.state ?? null
-    const ratePerEvent = getTollRate(stateName)
+    const ratePerEvent = getTollRate(stateName) * inflationMultiplier
 
     // Keep only toll points within ~500m of the actual route path.
     const NEAR = 0.005
