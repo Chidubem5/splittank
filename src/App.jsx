@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { getYears, getMakes, getModels, getOptions, getVehicleMPG } from './api/fuelEconomy'
 import { STATE_GAS_PRICES } from './data/gasPrices'
+import { getTollRate }      from './data/tollRates'
 import { fetchStateGasPrice, normalizeCounty, METRO_STATES } from './api/gasPrice'
 import { fetchCounties } from './api/counties'
 import Combobox from './components/Combobox'
@@ -172,8 +173,9 @@ export default function App() {
   }
 
   // Queries OpenStreetMap for toll booths and electronic gantries along a route,
-  // clusters nearby points (so a multi-lane plaza counts once), and returns
-  // a rough dollar estimate ($1.25 per toll event).
+  // clusters nearby points (so a multi-lane plaza counts once), reverse-geocodes
+  // the route midpoint to pick a state-specific per-event rate, and returns an
+  // estimated dollar total.
   async function estimateTolls(routeCoords) {
     if (!routeCoords?.length) return null
     const lats = routeCoords.map(c => c[1])
@@ -181,17 +183,33 @@ export default function App() {
     const s = Math.min(...lats) - 0.05, n = Math.max(...lats) + 0.05
     const w = Math.min(...lons) - 0.05, e = Math.max(...lons) + 0.05
 
-    const query = `[out:json][timeout:20];
+    // Fetch toll infrastructure and the state at the route midpoint in parallel.
+    const mid = routeCoords[Math.floor(routeCoords.length / 2)]
+    const [overpassRes, geoRes] = await Promise.all([
+      fetch('https://overpass-api.de/api/interpreter', {
+        method: 'POST',
+        body: `[out:json][timeout:20];
 (
   node["barrier"="toll_booth"](${s},${w},${n},${e});
   node["barrier"="toll_gantry"](${s},${w},${n},${e});
   node["highway"="toll_booth"](${s},${w},${n},${e});
 );
-out body;`
-    const res  = await fetch('https://overpass-api.de/api/interpreter', { method: 'POST', body: query })
-    const data = await res.json()
-    const all  = data.elements || []
+out body;`,
+      }),
+      fetch(
+        `https://nominatim.openstreetmap.org/reverse?lat=${mid[1]}&lon=${mid[0]}&format=json`,
+        { headers: { 'Accept-Language': 'en' } }
+      ).catch(() => null),
+    ])
+
+    const overpassData = await overpassRes.json()
+    const all = overpassData.elements || []
     if (!all.length) return 0
+
+    // State-specific rate — falls back to national default if state is unknown.
+    const geoData  = geoRes ? await geoRes.json().catch(() => null) : null
+    const stateName = geoData?.address?.state ?? null
+    const ratePerEvent = getTollRate(stateName)
 
     // Keep only toll points within ~500m of the actual route path.
     const NEAR = 0.005
@@ -205,11 +223,11 @@ out body;`
     const CLUSTER = 0.002
     const events = []
     for (const pt of near) {
-      if (!events.some(e => Math.abs(e.lat - pt.lat) < CLUSTER && Math.abs(e.lon - pt.lon) < CLUSTER))
+      if (!events.some(ev => Math.abs(ev.lat - pt.lat) < CLUSTER && Math.abs(ev.lon - pt.lon) < CLUSTER))
         events.push(pt)
     }
 
-    return events.length > 0 ? parseFloat((events.length * 1.25).toFixed(2)) : 0
+    return events.length > 0 ? parseFloat((events.length * ratePerEvent).toFixed(2)) : 0
   }
 
   async function fetchRoute() {
