@@ -215,6 +215,26 @@ body {
   margin-bottom: 16px;
 }
 
+/* Round trip toggle */
+.round-trip-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+  margin-bottom: 18px;
+  user-select: none;
+}
+.round-trip-toggle input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--blue);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
 /* ═══════════════════════════════════════════
    FORM FIELDS
 ═══════════════════════════════════════════ */

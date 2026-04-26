@@ -18,7 +18,8 @@ import './App.css'
 export default function App() {
 
   // ── Trip state ────────────────────────────────────────────────────────────
-  const [miles,         setMiles]         = useState('')    // miles driven
+  const [miles,         setMiles]         = useState('')    // miles driven (one way)
+  const [roundTrip,     setRoundTrip]     = useState(false) // double miles for return trip
   const [state,         setState]         = useState('')    // US state name
   const [gasPrice,      setGasPrice]      = useState('')    // $/gallon
   const [customGas,     setCustomGas]     = useState(false) // true if user manually typed a price
@@ -483,28 +484,30 @@ out body;`,
     const gp = parseFloat(gasPrice)
     if (!m || !gp) return null
 
+    const effectiveMiles = roundTrip ? m * 2 : m
+
     let gallons, mpg
 
     if (cityRatio !== null && mpgData?.city && mpgData?.highway && !showManual) {
       // City/highway split from route calculation
-      const cityM = m * cityRatio
-      const hwyM  = m * (1 - cityRatio)
+      const cityM = effectiveMiles * cityRatio
+      const hwyM  = effectiveMiles * (1 - cityRatio)
       gallons = cityM / mpgData.city + hwyM / mpgData.highway
-      mpg = parseFloat((m / gallons).toFixed(1))
+      mpg = parseFloat((effectiveMiles / gallons).toFixed(1))
     } else {
       mpg = activeMpg()
       if (!mpg) return null
-      gallons = m / mpg
+      gallons = effectiveMiles / mpg
     }
 
-    const tollAmount = parseFloat(tolls) || 0
+    const tollAmount = (parseFloat(tolls) || 0) * (roundTrip ? 2 : 1)
     const gasCost   = gallons * gp
     const totalCost = gasCost + tollAmount
     const perPerson = splitMode === 'even'
       ? totalCost / (passengers + 1)
       : totalCost / passengers
 
-    return { gallons, gasCost, tollAmount, totalCost, perPerson, passengers, splitMode, miles: m, mpg, gp, cityRatio }
+    return { gallons, gasCost, tollAmount, totalCost, perPerson, passengers, splitMode, miles: effectiveMiles, mpg, gp, cityRatio, roundTrip }
   })()
 
   // Scroll the result card into view the first time a result appears.
@@ -606,6 +609,16 @@ out body;`,
         {/* ── TRIP DETAILS ──────────────────────────────────────────────────── */}
         <section className="card">
           <span className="section-title">Trip Details</span>
+
+          {/* Round trip toggle */}
+          <label className="round-trip-toggle">
+            <input
+              type="checkbox"
+              checked={roundTrip}
+              onChange={e => setRoundTrip(e.target.checked)}
+            />
+            Round trip
+          </label>
 
           {/* Route calculator — geocodes two addresses and auto-fills miles */}
           <div className="field">
