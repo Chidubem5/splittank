@@ -190,11 +190,13 @@ export default function App() {
     const [overpassRes, geoRes, inflationMultiplier] = await Promise.all([
       fetch('https://overpass-api.de/api/interpreter', {
         method: 'POST',
-        body: `[out:json][timeout:20];
+        body: `[out:json][timeout:25];
 (
   node["barrier"="toll_booth"](${s},${w},${n},${e});
   node["barrier"="toll_gantry"](${s},${w},${n},${e});
   node["highway"="toll_booth"](${s},${w},${n},${e});
+  node["toll"="yes"](${s},${w},${n},${e});
+  node["barrier"="payment_point"](${s},${w},${n},${e});
 );
 out body;`,
       }),
@@ -214,8 +216,10 @@ out body;`,
     const stateName = geoData?.address?.state ?? null
     const ratePerEvent = getTollRate(stateName) * inflationMultiplier
 
-    // Keep only toll points within ~500m of the actual route path.
-    const NEAR = 0.005
+    // Keep only toll points within ~1.5km of the actual route path.
+    // overview=full gives dense geometry, but 0.015° gives breathing room for
+    // slight OSM placement offsets vs the OSRM road center line.
+    const NEAR = 0.015
     const near = all.filter(pt =>
       routeCoords.some(([lon, lat]) =>
         Math.abs(pt.lat - lat) < NEAR && Math.abs(pt.lon - lon) < NEAR
@@ -244,10 +248,12 @@ out body;`,
         setRouteError("Couldn't find one or both locations. Try adding a city or state, or use a well-known landmark name.")
         return
       }
-      // overview=simplified gives us the route geometry for toll detection.
-      // annotations=speed,distance gives per-segment data for city/highway split.
+      // overview=full gives a dense coordinate list (one point per road segment)
+      // so the proximity check in estimateTolls can actually hit toll booth nodes.
+      // overview=simplified produces ~50 sparse points for a 300-mile trip,
+      // leaving multi-mile gaps that swallow every toll booth between them.
       const routeRes = await fetch(
-        `https://router.project-osrm.org/route/v1/driving/${from.lon},${from.lat};${to.lon},${to.lat}?overview=simplified&geometries=geojson&annotations=speed,distance`
+        `https://router.project-osrm.org/route/v1/driving/${from.lon},${from.lat};${to.lon},${to.lat}?overview=full&geometries=geojson&annotations=speed,distance`
       )
       const routeData = await routeRes.json()
       if (routeData.code !== 'Ok' || !routeData.routes?.[0]) {
