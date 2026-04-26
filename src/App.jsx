@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { getYears, getMakes, getModels, getOptions, getVehicleMPG } from './api/fuelEconomy'
 import { STATE_GAS_PRICES } from './data/gasPrices'
 import { getTollRate }      from './data/tollRates'
@@ -14,6 +14,36 @@ import ProfileModal from './components/ProfileModal'
 import FriendsPanel from './components/FriendsPanel'
 import { useAuth } from './contexts/AuthContext'
 import './App.css'
+
+// Scores a trim option string to estimate how commonly it sells in the US.
+// Higher = more likely to be the volume trim. Ties go to the earlier index.
+// Logic: 4-cyl outsells 6/8; FWD/RWD outsells AWD; automatics dominate;
+// hybrids/EVs/performance variants are niche relative to base powertrain.
+function trimPopularityScore(text) {
+  const t = text.toLowerCase()
+  let s = 0
+  if (/\b4-?cyl\b|\bi-?4\b/.test(t))              s += 4
+  if (/\b3-?cyl\b|\bi-?3\b/.test(t))              s += 3
+  if (/\b6-?cyl\b|\bv-?6\b/.test(t))              s -= 1
+  if (/\b8-?cyl\b|\bv-?8\b/.test(t))              s -= 3
+  if (/\b(10|12)-?cyl\b|\bv-?1[02]\b/.test(t))   s -= 5
+  if (/\bawd\b|\b4wd\b|\b4x4\b|\ball.?wheel/.test(t)) s -= 2
+  if (/\bmanual\b|\bm\/t\b/.test(t))              s -= 2
+  if (/\bphev\b|\bplug.?in\b/.test(t))            s -= 1
+  if (/\bhybrid\b/.test(t))                       s -= 1
+  if (/\belectric\b|\bbev\b/.test(t))             s -= 2
+  return s
+}
+
+function mostCommonTrimIdx(opts) {
+  if (opts.length <= 1) return 0
+  let bestIdx = 0, bestScore = trimPopularityScore(opts[0].text)
+  for (let i = 1; i < opts.length; i++) {
+    const s = trimPopularityScore(opts[i].text)
+    if (s > bestScore) { bestScore = s; bestIdx = i }
+  }
+  return bestIdx
+}
 
 export default function App() {
 
@@ -40,6 +70,7 @@ export default function App() {
   const [options,       setOptions]       = useState([])    // trim/engine variants
   const [optionId,      setOptionId]      = useState('')    // selected trim's numeric ID
   const [optionText,    setOptionText]    = useState('')    // display text for typeable trim field
+  const commonTrimIdx = useMemo(() => mostCommonTrimIdx(options), [options])
   const [mpgData,       setMpgData]       = useState(null)  // { city, highway, combined }
   const [mpgType,       setMpgType]       = useState('combined') // which MPG tab is active
   const [loadingMpg,    setLoadingMpg]    = useState(false)
@@ -874,12 +905,14 @@ out body;`,
                 <div className="field">
                   <label>Trim / Engine</label>
                   <Combobox
-                    options={options.map((o, i) => i === 0 ? `${o.text} (Most Common)` : o.text)}
+                    options={options.map((o, i) =>
+                      i === commonTrimIdx ? `${o.text} (Most Common)` : o.text
+                    )}
                     value={optionText}
                     onChange={text => {
                       setOptionText(text)
                       const match = options.find((o, i) =>
-                        text === (i === 0 ? `${o.text} (Most Common)` : o.text)
+                        text === (i === commonTrimIdx ? `${o.text} (Most Common)` : o.text)
                       )
                       setOptionId(match ? match.value : '')
                     }}
