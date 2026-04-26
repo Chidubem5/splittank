@@ -145,23 +145,44 @@ export default function App() {
   }
 
   // ── Route calculator ──────────────────────────────────────────────────────
+
+  // Tries Nominatim first (good for street addresses), then falls back to
+  // Photon (komoot.io) which handles venue names, landmarks, and POIs well.
+  async function geocode(query) {
+    try {
+      const res  = await fetch(
+        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1`,
+        { headers: { 'Accept-Language': 'en' } }
+      )
+      const data = await res.json()
+      if (data?.[0]) return { lat: data[0].lat, lon: data[0].lon }
+    } catch {}
+
+    try {
+      const res    = await fetch(
+        `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=1&lang=en`
+      )
+      const data   = await res.json()
+      const coords = data?.features?.[0]?.geometry?.coordinates
+      if (coords) return { lat: String(coords[1]), lon: String(coords[0]) }
+    } catch {}
+
+    return null
+  }
+
   async function fetchRoute() {
     if (!tripFrom.trim() || !tripTo.trim()) return
     setRouteLoading(true)
     setRouteError('')
     setCityRatio(null)
     try {
-      const [fromRes, toRes] = await Promise.all([
-        fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(tripFrom)}&format=json&limit=1`, { headers: { 'Accept-Language': 'en' } }),
-        fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(tripTo)}&format=json&limit=1`,   { headers: { 'Accept-Language': 'en' } }),
-      ])
-      const [fromData, toData] = await Promise.all([fromRes.json(), toRes.json()])
-      if (!fromData?.[0] || !toData?.[0]) {
-        setRouteError("Couldn't find one or both addresses. Try adding a city or state.")
+      const [from, to] = await Promise.all([geocode(tripFrom), geocode(tripTo)])
+      if (!from || !to) {
+        setRouteError("Couldn't find one or both locations. Try adding a city or state, or use a well-known landmark name.")
         return
       }
       const routeRes = await fetch(
-        `https://router.project-osrm.org/route/v1/driving/${fromData[0].lon},${fromData[0].lat};${toData[0].lon},${toData[0].lat}?overview=false&annotations=speed,distance`
+        `https://router.project-osrm.org/route/v1/driving/${from.lon},${from.lat};${to.lon},${to.lat}?overview=false&annotations=speed,distance`
       )
       const routeData = await routeRes.json()
       if (routeData.code !== 'Ok' || !routeData.routes?.[0]) {
