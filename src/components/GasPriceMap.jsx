@@ -98,8 +98,11 @@ const DEFAULT_ZOOM   = 1
 
 export default function GasPriceMap({ selectedState, selectedPrice }) {
   const [tooltip, setTooltip] = useState(null)
+  const [tapInfo, setTapInfo] = useState(null)
   const [zoom,    setZoom]    = useState(DEFAULT_ZOOM)
   const [center,  setCenter]  = useState(DEFAULT_CENTER)
+
+  const isMobile = window.innerWidth < 640
 
   // Day mode (6 am – 7 pm) = light background. Evening/night = dark.
   const hour   = new Date().getHours()
@@ -165,17 +168,20 @@ export default function GasPriceMap({ selectedState, selectedPrice }) {
                       fill={priceColor(price)}
                       stroke={isSelected ? borderSelected : borderNormal}
                       strokeWidth={isSelected ? 3 / zoom : 0.9 / zoom}
-                      onMouseEnter={e =>
+                      onClick={isMobile ? () =>
+                        setTapInfo(t => t?.name === name ? null : { name, price })
+                      : undefined}
+                      onMouseEnter={isMobile ? undefined : e =>
                         setTooltip({ name, price, x: e.clientX, y: e.clientY })
                       }
-                      onMouseMove={e =>
+                      onMouseMove={isMobile ? undefined : e =>
                         setTooltip(t => t ? { ...t, x: e.clientX, y: e.clientY } : null)
                       }
-                      onMouseLeave={() => setTooltip(null)}
+                      onMouseLeave={isMobile ? undefined : () => setTooltip(null)}
                       style={{
                         default: { outline: 'none' },
-                        hover:   { outline: 'none', opacity: 0.72 },
-                        pressed: { outline: 'none' },
+                        hover:   { outline: 'none', opacity: isMobile ? 1 : 0.72 },
+                        pressed: { outline: 'none', opacity: 0.85 },
                       }}
                     />
                   )
@@ -183,7 +189,7 @@ export default function GasPriceMap({ selectedState, selectedPrice }) {
               }
             </Geographies>
 
-            {Object.entries(STATE_LABELS).map(([name, info]) => {
+            {!isMobile && Object.entries(STATE_LABELS).map(([name, info]) => {
               if (!info) return null
               const price = STATE_GAS_PRICES[name]
               if (!price) return null
@@ -230,6 +236,21 @@ export default function GasPriceMap({ selectedState, selectedPrice }) {
         </div>
       </div>
 
+      {isMobile && (
+        <div className="gas-map-mobile-bar">
+          {tapInfo ? (
+            <>
+              <span className="gas-map-mobile-name">{tapInfo.name}</span>
+              <span className="gas-map-mobile-price">
+                {tapInfo.price != null ? `$${tapInfo.price.toFixed(2)}/gal` : 'No data'}
+              </span>
+            </>
+          ) : (
+            <span className="gas-map-mobile-hint">Tap any state to see its price</span>
+          )}
+        </div>
+      )}
+
       <div className="gas-map-legend">
         <span className="gas-map-legend-end">Cheaper</span>
         <div className="gas-map-gradient" aria-hidden="true" />
@@ -238,7 +259,7 @@ export default function GasPriceMap({ selectedState, selectedPrice }) {
         <span className="gas-map-legend-note">Scroll to zoom · Drag to pan</span>
       </div>
 
-      {tooltip && (
+      {!isMobile && tooltip && (
         <div
           className="gas-map-tooltip"
           style={{ left: tooltip.x + 14, top: tooltip.y - 56 }}
