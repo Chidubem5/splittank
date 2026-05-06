@@ -1,18 +1,55 @@
+// App.jsx — Root component: the entire Split Tank calculator
+//
+// This file owns all calculator state and wires every feature together.
+// Everything the user sees and interacts with (except auth modals) lives here.
+//
+// ── WHERE DATA COMES FROM ─────────────────────────────────────────────────────
+//  api/fuelEconomy.js   → year/make/model/trim dropdowns + MPG figures
+//                          (calls FuelEconomy.gov REST API in a 5-step cascade)
+//  api/gasPrice.js      → live $/gallon from EIA weekly data with 24-hr cache
+//                          Falls back to data/gasPrices.js when API unavailable
+//  data/gasPrices.js    → hardcoded state-average prices used as offline fallback
+//  api/tollInflation.js → BLS CPI-U year-over-year multiplier (7-day cache)
+//                          Applied to data/tollRates.js base rates in estimateTolls()
+//  data/tollRates.js    → per-state toll event cost (base year: 2024 calibration)
+//  api/counties.js      → Census Bureau county list for the county dropdown
+//  contexts/AuthContext.jsx → currentUser, userProfile (saved car+payment),
+//                             friends list, saveProfile() — all via Firebase
+//
+// ── HOW RESULTS ARE COMPUTED ──────────────────────────────────────────────────
+//  1. miles (from route or manual input)
+//  2. gasPrice (live EIA → fallback static → user manual override)
+//  3. mpg (FuelEconomy.gov trim lookup OR manual entry OR city/highway blend
+//     from OSRM speed annotations)
+//  4. tollAmount (Overpass API toll booth nodes × inflated per-state rate)
+//  5. liveResult (derived from 1–4 every render — no button press needed)
+//
+// ── COMPONENT TREE ────────────────────────────────────────────────────────────
+//  App
+//   ├─ RoadHero          (decorative banner SVG)
+//   ├─ Combobox ×4       (year / make / model / trim inputs)
+//   ├─ PaymentButtons    (Venmo / Cash App / Zelle / Apple Pay deep links)
+//   ├─ RoadGallery       (three illustrated panels at page bottom)
+//   ├─ AuthModal         (sign-in overlay — shown when showAuth=true)
+//   ├─ ProfileModal      (car + payment save — shown when showProfile=true)
+//   └─ FriendsPanel      (friends list + driver picker — shown when showFriends=true)
+
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { getYears, getMakes, getModels, getOptions, getVehicleMPG } from './api/fuelEconomy'
-import { STATE_GAS_PRICES } from './data/gasPrices'
-import { getTollRate }      from './data/tollRates'
-import { fetchTollInflationMultiplier } from './api/tollInflation'
+import { STATE_GAS_PRICES } from './data/gasPrices'      // offline fallback prices
+import { getTollRate }      from './data/tollRates'        // base toll cost per state
+import { fetchTollInflationMultiplier } from './api/tollInflation'  // BLS CPI multiplier
 import { fetchStateGasPrice, normalizeCounty, METRO_STATES } from './api/gasPrice'
-import { fetchCounties } from './api/counties'
-import Combobox from './components/Combobox'
-import RoadHero from './components/RoadHero'
-import RoadGallery from './components/RoadGallery'
-import PaymentButtons from './components/PaymentButtons'
-import AuthModal from './components/AuthModal'
-import ProfileModal from './components/ProfileModal'
-import FriendsPanel from './components/FriendsPanel'
-import { useAuth } from './contexts/AuthContext'
+import { fetchCounties } from './api/counties'             // Census Bureau county list
+import Combobox from './components/Combobox'               // custom typeahead input (replaces <datalist>)
+import RoadHero from './components/RoadHero'               // decorative SVG banner
+import GasPriceMap from './components/GasPriceMap'         // interactive USA gas price heat map
+import RoadGallery from './components/RoadGallery'         // three illustrated panels
+import PaymentButtons from './components/PaymentButtons'   // Venmo/CashApp/Zelle/Apple Pay buttons
+import AuthModal from './components/AuthModal'             // Google/Facebook/Apple sign-in modal
+import ProfileModal from './components/ProfileModal'       // save car + payment handles
+import FriendsPanel from './components/FriendsPanel'       // manage friends + select driver
+import { useAuth } from './contexts/AuthContext'           // Firebase auth state + Firestore profile
 import './App.css'
 
 // Scores a trim option string to estimate how commonly it sells in the US.
@@ -123,6 +160,7 @@ export default function App() {
   const [showProfile, setShowProfile] = useState(false)
   const [showFriends, setShowFriends] = useState(false)
   const [menuOpen,    setMenuOpen]    = useState(false)
+  const [showMap,     setShowMap]     = useState(false)
 
   // useRef stores a reference to the dropdown DOM element.
   // Unlike useState, changing a ref does NOT trigger a re-render.
@@ -1258,7 +1296,18 @@ out body;`,
         </section>
       </main>
 
-      {/* Decorative bottom gallery panels */}
+      <div className="gas-map-toggle-section">
+        <button
+          className="gas-map-toggle-btn"
+          onClick={() => setShowMap(s => !s)}
+          aria-expanded={showMap}
+        >
+          <span>Gas Price Heat Map</span>
+          <span className="gas-map-toggle-icon" aria-hidden="true">{showMap ? '▲' : '▼'}</span>
+        </button>
+        {showMap && <GasPriceMap selectedState={state} selectedPrice={gasPrice} />}
+      </div>
+
       <RoadGallery />
 
       <footer className="app-footer">

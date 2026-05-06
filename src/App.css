@@ -1627,3 +1627,225 @@ input[type="number"]:disabled { opacity: 0.4; cursor: not-allowed; }
   transition: border-color .15s, background .15s;
 }
 .passenger-request-btn:hover { border-color: var(--blue-dark); background: var(--bg-card); }
+
+/* ═══════════════════════════════════════════
+   GAS PRICE MAP TOGGLE (between payment + cartoons)
+═══════════════════════════════════════════ */
+.gas-map-toggle-section { display: flex; flex-direction: column; }
+
+.gas-map-toggle-btn {
+  width: 100%;
+  background: var(--text);
+  color: var(--yellow);
+  border: none;
+  border-top: 4px solid var(--yellow);
+  padding: 14px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-size: 0.85rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.gas-map-toggle-btn:hover { background: #252538; }
+.gas-map-toggle-icon { font-size: 0.6rem; opacity: 0.7; }
+
+/* ═══════════════════════════════════════════
+   GAS PRICE MAP
+═══════════════════════════════════════════ */
+.gas-map-section {
+  background: var(--text);
+  padding: 28px 16px 24px;
+}
+
+/* Light (day) mode — white background with adapted text colors */
+.gas-map-section--light                             { background: #fff; }
+.gas-map-section--light .gas-map-title              { color: var(--text); }
+.gas-map-section--light .gas-map-sub                { color: var(--text-muted); }
+.gas-map-section--light .gas-map-hint               { color: var(--text-muted); }
+.gas-map-section--light .gas-map-callout            { background: var(--blue-light); border-color: var(--blue-dark); }
+.gas-map-section--light .gas-map-callout-state      { color: var(--blue-dark); }
+.gas-map-section--light .gas-map-callout-price      { color: var(--text); }
+.gas-map-section--light .gas-map-callout-price span { color: var(--text-muted); }
+.gas-map-section--light .gas-map-wrap               { background: var(--bg); }
+.gas-map-section--light .gas-map-zoom button        { background: rgba(0,0,0,0.07); color: var(--text); }
+.gas-map-section--light .gas-map-zoom button:hover  { background: var(--blue-light); }
+.gas-map-section--light .gas-map-legend-end         { color: var(--text-muted); }
+.gas-map-section--light .gas-map-legend-note        { color: var(--text-light); }
+
+.gas-map-header {
+  max-width: 860px;
+  margin: 0 auto 14px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.gas-map-title {
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: -0.02em;
+}
+
+.gas-map-sub {
+  font-size: 0.72rem;
+  color: rgba(255,255,255,0.4);
+  margin-top: 3px;
+}
+
+.gas-map-hint {
+  font-size: 0.78rem;
+  color: rgba(255,255,255,0.35);
+  font-style: italic;
+  max-width: 200px;
+  text-align: right;
+}
+
+/* Selected-state callout card — top-right of header */
+.gas-map-callout {
+  background: rgba(255,193,7,0.1);
+  border: 1.5px solid var(--yellow);
+  border-radius: var(--radius-sm);
+  padding: 8px 14px;
+  text-align: right;
+  min-width: 130px;
+}
+
+.gas-map-callout-state {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--yellow);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+
+.gas-map-callout-price {
+  font-size: 1.75rem;
+  font-weight: 900;
+  color: #fff;
+  line-height: 1.1;
+}
+
+.gas-map-callout-price span {
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: rgba(255,255,255,0.5);
+  margin-left: 2px;
+}
+
+/* Map container — holds the SVG + zoom buttons */
+.gas-map-wrap {
+  max-width: 860px;
+  margin: 0 auto;
+  position: relative;
+  background: rgba(255,255,255,0.03);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+/* Zoom controls */
+.gas-map-zoom {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.gas-map-zoom button {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.1);
+  color: #fff;
+  font-size: 1.1rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+  line-height: 1;
+}
+
+.gas-map-zoom button:hover { background: rgba(255,193,7,0.3); }
+
+.gas-map-reset { font-size: 0.95rem !important; }
+
+/* Legend row below the map */
+.gas-map-legend {
+  max-width: 860px;
+  margin: 12px auto 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.gas-map-legend-end {
+  font-size: 0.7rem;
+  color: rgba(255,255,255,0.5);
+  white-space: nowrap;
+}
+
+.gas-map-gradient {
+  flex: 1;
+  max-width: 220px;
+  height: 10px;
+  border-radius: 5px;
+  background: linear-gradient(to right,
+    #01579B,
+    #0288D1 22%,
+    #29B6F6 42%,
+    #E3F2FD 57%,
+    #FFC107 70%,
+    #F9A825 85%,
+    #E65100
+  );
+}
+
+.gas-map-legend-sep {
+  flex: 1;
+}
+
+.gas-map-legend-note {
+  font-size: 0.65rem;
+  color: rgba(255,255,255,0.3);
+  white-space: nowrap;
+}
+
+/* Tooltip — fixed so it stays above the cursor regardless of scroll */
+.gas-map-tooltip {
+  position: fixed;
+  background: rgba(15, 15, 25, 0.96);
+  color: #fff;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 8px;
+  padding: 6px 11px;
+  font-size: 0.78rem;
+  pointer-events: none;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  white-space: nowrap;
+}
+
+.gas-map-tooltip strong { font-size: 0.8rem; }
+.gas-map-tooltip span   { color: var(--yellow); font-weight: 700; }
+
+@media (max-width: 600px) {
+  .gas-map-header  { flex-direction: column; align-items: flex-start; }
+  .gas-map-callout { text-align: left; width: 100%; }
+  .gas-map-hint    { max-width: 100%; text-align: left; }
+  .gas-map-legend-note { display: none; }
+}
