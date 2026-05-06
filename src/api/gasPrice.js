@@ -208,6 +208,73 @@ async function fetchArea(area) {
 }
 
 // ─────────────────────────────────────────
+// fetchAllStatePrices — batch fetch for the heat map
+// Fetches the latest weekly price for every state + PADD region in ONE
+// API request (multi-duoarea filter). Returns { StateName: price } or null.
+// Uses the same 24-hour localStorage cache as the single-state fetcher.
+// ─────────────────────────────────────────
+export async function fetchAllStatePrices() {
+  if (!EIA_KEY) return null
+
+  const CACHE_KEY = 'eia_all_states_v1'
+  try {
+    const raw = localStorage.getItem(CACHE_KEY)
+    if (raw) {
+      const c = JSON.parse(raw)
+      if (Date.now() - c.t < CACHE_TTL) return c.prices
+    }
+  } catch {}
+
+  // Collect every unique area code: all state codes + all PADD sub-regions
+  const allAreas = [...new Set([
+    ...Object.values(STATE_AREA),
+    ...Object.values(PADD_FALLBACK),
+  ])]
+
+  const areaParams = allAreas.map(a => `&facets[duoarea][]=${a}`).join('')
+  const url =
+    `https://api.eia.gov/v2/petroleum/pri/gnd/data/` +
+    `?api_key=${EIA_KEY}` +
+    `&frequency=weekly` +
+    `&data[0]=value` +
+    `&facets[product][]=EPM0` +
+    areaParams +
+    `&sort[0][column]=period` +
+    `&sort[0][direction]=desc` +
+    `&length=200`  // enough to get the latest entry for every area
+
+  try {
+    const res = await fetch(url)
+    if (!res.ok) return null
+    const rows = (await res.json())?.response?.data ?? []
+
+    // Pick the most-recent price per area code (rows are sorted newest-first)
+    const areaPrice = {}
+    for (const row of rows) {
+      const code = row.duoarea
+      if (code && row.value != null && !areaPrice[code]) {
+        areaPrice[code] = parseFloat(row.value)
+      }
+    }
+
+    // Map area prices back to state names using the same fallback chain
+    const prices = {}
+    for (const [stateName, area] of Object.entries(STATE_AREA)) {
+      const price = areaPrice[area] ?? areaPrice[PADD_FALLBACK[area]] ?? null
+      if (price != null) prices[stateName] = price
+    }
+
+    try {
+      localStorage.setItem(CACHE_KEY, JSON.stringify({ prices, t: Date.now() }))
+    } catch {}
+
+    return prices
+  } catch {
+    return null
+  }
+}
+
+// ─────────────────────────────────────────
 // fetchStateGasPrice — main exported function
 // Resolves the best available gas price for a given state + optional county.
 // The three-level fallback ensures we always return something useful:

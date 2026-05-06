@@ -96,7 +96,7 @@ const STATE_LABELS = {
 const DEFAULT_CENTER = [-97, 38]
 const DEFAULT_ZOOM   = 1
 
-export default function GasPriceMap({ selectedState, selectedPrice }) {
+export default function GasPriceMap({ selectedState, selectedPrice, mapPrices }) {
   const [tooltip, setTooltip] = useState(null)
   const [tapInfo, setTapInfo] = useState(null)
   const [zoom,    setZoom]    = useState(DEFAULT_ZOOM)
@@ -109,7 +109,7 @@ export default function GasPriceMap({ selectedState, selectedPrice }) {
   const isDark = hour >= 19 || hour < 6
 
   const livePrice    = selectedPrice ? parseFloat(selectedPrice) : NaN
-  const displayPrice = !isNaN(livePrice) ? livePrice : STATE_GAS_PRICES[selectedState]
+  const displayPrice = !isNaN(livePrice) ? livePrice : (mapPrices?.[selectedState] ?? STATE_GAS_PRICES[selectedState])
 
   function handleZoomIn()  { setZoom(z => Math.min(z * 1.5, 8)) }
   function handleZoomOut() { setZoom(z => Math.max(z / 1.5, 1)) }
@@ -159,7 +159,7 @@ export default function GasPriceMap({ selectedState, selectedPrice }) {
               {({ geographies }) =>
                 geographies.map(geo => {
                   const name       = geo.properties.name
-                  const price      = STATE_GAS_PRICES[name]
+                  const price      = mapPrices?.[name] ?? STATE_GAS_PRICES[name]
                   const isSelected = name === selectedState
                   return (
                     <Geography
@@ -191,7 +191,7 @@ export default function GasPriceMap({ selectedState, selectedPrice }) {
 
             {!isMobile && Object.entries(STATE_LABELS).map(([name, info]) => {
               if (!info) return null
-              const price = STATE_GAS_PRICES[name]
+              const price = mapPrices?.[name] ?? STATE_GAS_PRICES[name]
               if (!price) return null
               const pw = info.size * 3.6   // pill width
               const ph = info.size * 1.5   // pill height

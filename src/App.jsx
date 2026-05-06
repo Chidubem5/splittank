@@ -39,7 +39,7 @@ import { getYears, getMakes, getModels, getOptions, getVehicleMPG } from './api/
 import { STATE_GAS_PRICES } from './data/gasPrices'      // offline fallback prices
 import { getTollRate }      from './data/tollRates'        // base toll cost per state
 import { fetchTollInflationMultiplier } from './api/tollInflation'  // BLS CPI multiplier
-import { fetchStateGasPrice, normalizeCounty, METRO_STATES } from './api/gasPrice'
+import { fetchStateGasPrice, fetchAllStatePrices, normalizeCounty, METRO_STATES } from './api/gasPrice'
 import { fetchCounties } from './api/counties'             // Census Bureau county list
 import Combobox from './components/Combobox'               // custom typeahead input (replaces <datalist>)
 import RoadHero from './components/RoadHero'               // decorative SVG banner
@@ -161,6 +161,7 @@ export default function App() {
   const [showFriends, setShowFriends] = useState(false)
   const [menuOpen,    setMenuOpen]    = useState(false)
   const [showMap,     setShowMap]     = useState(false)
+  const [mapPrices,   setMapPrices]   = useState(null)   // live EIA prices for all 50 states
 
   // useRef stores a reference to the dropdown DOM element.
   // Unlike useState, changing a ref does NOT trigger a re-render.
@@ -546,6 +547,12 @@ out body;`,
       }
     })
   }, [state, county])
+
+  // Fetch live prices for all 50 states once on mount so the heat map
+  // shows EIA weekly data instead of the static fallback prices.
+  useEffect(() => {
+    fetchAllStatePrices().then(prices => { if (prices) setMapPrices(prices) })
+  }, [])
 
   // ── Computed values ───────────────────────────────────────────────────────
   const activeMpg = () => {
@@ -1305,7 +1312,7 @@ out body;`,
           <span>Gas Price Heat Map</span>
           <span className="gas-map-toggle-icon" aria-hidden="true">{showMap ? '▲' : '▼'}</span>
         </button>
-        {showMap && <GasPriceMap selectedState={state} selectedPrice={gasPrice} />}
+        {showMap && <GasPriceMap selectedState={state} selectedPrice={gasPrice} mapPrices={mapPrices} />}
       </div>
 
       <RoadGallery />
