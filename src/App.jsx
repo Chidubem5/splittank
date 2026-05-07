@@ -82,10 +82,6 @@ function mostCommonTrimIdx(opts) {
   return bestIdx
 }
 
-// True only on iOS Safari 14.5+ and Android Chrome — the only browsers that
-// implement the Web Contact Picker API. Evaluated once at render time.
-const supportsContactPicker = 'contacts' in navigator && typeof navigator.contacts?.select === 'function'
-
 export default function App() {
 
   // ── Trip state ────────────────────────────────────────────────────────────
@@ -131,10 +127,7 @@ export default function App() {
   const [zelleContacts,  setZelleContacts]  = useState([''])
   const [appleContacts,  setAppleContacts]  = useState([''])
 
-  // ── Passenger contacts (for sending payment requests via SMS) ─────────────
-  const [passengerContacts, setPassengerContacts] = useState([])
-
-  // ── Tolls ─────────────────────────────────────────────────────────────────
+// ── Tolls ─────────────────────────────────────────────────────────────────
   const [tolls,          setTolls]          = useState('')
   const [tollsEstimated, setTollsEstimated] = useState(false) // true when auto-filled from route
 
@@ -368,40 +361,7 @@ out body;`,
     }
   }
 
-  // ── Sync contacts (Web Contact Picker API — iOS/Android only) ────────────
-  async function syncContacts() {
-    if (!('contacts' in navigator) || typeof navigator.contacts.select !== 'function') {
-      alert('Contact picker works on iOS Safari 14.5+ and Android Chrome. Enter contacts manually above.')
-      return
-    }
-    try {
-      // Call getProperties() first — required by Safari 17.4+ to discover available fields.
-      // Skipping this step causes select() to fail silently on recent iOS versions.
-      const supported = await navigator.contacts.getProperties()
-      const props = ['name', 'tel', 'email'].filter(p => supported.includes(p))
-      if (!props.length) {
-        alert('Contacts are not accessible on this device.')
-        return
-      }
-      const picked = await navigator.contacts.select(props, { multiple: true })
-      if (!picked?.length) return
-      const phones = [...new Set(picked.flatMap(c => (c.tel  || []).map(t => t.trim()).filter(Boolean)))]
-      const emails = [...new Set(picked.flatMap(c => (c.email || []).map(e => e.trim()).filter(Boolean)))]
-      if (phones.length || emails.length) {
-        setZelleContacts([...phones, ...emails])
-        if (phones.length) setAppleContacts(phones)
-      }
-      setPassengerContacts(picked.map(c => ({ name: c.name?.[0] || 'Passenger', tel: c.tel?.[0] || null })))
-    } catch (err) {
-      // AbortError = user dismissed the picker — no feedback needed.
-      // Any other error (SecurityError, NotAllowedError) means the OS/browser blocked access.
-      if (err?.name !== 'AbortError') {
-        alert('Could not access contacts. Make sure this site has Contacts permission in your device Settings.')
-      }
-    }
-  }
-
-  // Convert an EIA period string like "2026-04-14" into a readable "Apr 14"
+// Convert an EIA period string like "2026-04-14" into a readable "Apr 14"
   function formatEIADate(period) {
     if (!period) return null
     const [y, m, d] = period.split('-').map(Number)
@@ -1319,13 +1279,6 @@ out body;`,
             </div>
           </div>
 
-          {/* Sync Contacts button — only rendered on iOS Safari / Android Chrome */}
-          {supportsContactPicker && (
-            <button type="button" className="sync-contacts-btn" onClick={syncContacts}>
-              📇 Sync Contacts
-            </button>
-          )}
-
           {/* PaymentButtons only renders when there's a result to pay for */}
           {liveResult && (
             <PaymentButtons
@@ -1337,34 +1290,6 @@ out body;`,
             />
           )}
 
-          {/* Passenger payment requests — shown after syncing contacts */}
-          {passengerContacts.length > 0 && liveResult && (
-            <div className="passenger-requests">
-              <p className="passenger-requests-label">Send payment requests to passengers:</p>
-              {passengerContacts.map((contact, i) => {
-                if (!contact.tel) return null
-                const amount  = liveResult.perPerson.toFixed(2)
-                const handle  = venmoHandles.find(h => h.trim()) || ''
-                const payLink = handle
-                  ? `https://venmo.com/u/${handle}?txn=pay&amount=${amount}&note=Gas`
-                  : cashAppHandles.find(h => h.trim())
-                    ? `https://cash.app/$${cashAppHandles.find(h => h.trim())}/${amount}`
-                    : null
-                const body = payLink
-                  ? `Hey ${contact.name}, you owe $${amount} for gas! Pay here: ${payLink}`
-                  : `Hey ${contact.name}, you owe $${amount} for gas!`
-                return (
-                  <a
-                    key={i}
-                    className="passenger-request-btn"
-                    href={`sms:${contact.tel}?body=${encodeURIComponent(body)}`}
-                  >
-                    💬 Message {contact.name} — ${amount}
-                  </a>
-                )
-              })}
-            </div>
-          )}
         </section>
       </main>
 
