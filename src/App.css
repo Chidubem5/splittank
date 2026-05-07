@@ -388,11 +388,24 @@ input[type="number"]:disabled { opacity: 0.4; cursor: not-allowed; }
   margin: -8px -10px;
 }
 
+.location-error-block { margin-top: 8px; }
+
 .location-error {
   font-size: 0.78rem;
   color: var(--red);
-  margin-top: 8px;
   font-weight: 500;
+  margin: 0;
+}
+
+.location-hint {
+  margin: 6px 0 0;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  background: #F1F5F9;
+  border-left: 3px solid #94A3B8;
+  border-radius: 4px;
+  padding: 7px 10px;
+  line-height: 1.5;
 }
 
 .manual-state-row { margin-top: 10px; }

@@ -151,6 +151,7 @@ export default function App() {
   const [detectingLocation, setDetectingLocation] = useState(false)
   const [detectedLocation,  setDetectedLocation]  = useState(null) // { city, county, state }
   const [locationError,     setLocationError]     = useState(null)
+  const [locationDenied,    setLocationDenied]    = useState(false) // true when blocked by settings
   const [showManualState,   setShowManualState]   = useState(false)
 
   // ── Auth + modal state ────────────────────────────────────────────────────
@@ -365,12 +366,20 @@ out body;`,
 
   // ── Sync contacts (Web Contact Picker API — iOS/Android only) ────────────
   async function syncContacts() {
-    if (!navigator.contacts?.select) {
+    if (!('contacts' in navigator) || typeof navigator.contacts.select !== 'function') {
       alert('Contact picker works on iOS Safari 14.5+ and Android Chrome. Enter contacts manually above.')
       return
     }
     try {
-      const picked = await navigator.contacts.select(['name', 'tel', 'email'], { multiple: true })
+      // Call getProperties() first — required by Safari 17.4+ to discover available fields.
+      // Skipping this step causes select() to fail silently on recent iOS versions.
+      const supported = await navigator.contacts.getProperties()
+      const props = ['name', 'tel', 'email'].filter(p => supported.includes(p))
+      if (!props.length) {
+        alert('Contacts are not accessible on this device.')
+        return
+      }
+      const picked = await navigator.contacts.select(props, { multiple: true })
       if (!picked?.length) return
       const phones = [...new Set(picked.flatMap(c => (c.tel  || []).map(t => t.trim()).filter(Boolean)))]
       const emails = [...new Set(picked.flatMap(c => (c.email || []).map(e => e.trim()).filter(Boolean)))]
@@ -379,7 +388,13 @@ out body;`,
         if (phones.length) setAppleContacts(phones)
       }
       setPassengerContacts(picked.map(c => ({ name: c.name?.[0] || 'Passenger', tel: c.tel?.[0] || null })))
-    } catch { /* user cancelled */ }
+    } catch (err) {
+      // AbortError = user dismissed the picker — no feedback needed.
+      // Any other error (SecurityError, NotAllowedError) means the OS/browser blocked access.
+      if (err?.name !== 'AbortError') {
+        alert('Could not access contacts. Make sure this site has Contacts permission in your device Settings.')
+      }
+    }
   }
 
   // Convert an EIA period string like "2026-04-14" into a readable "Apr 14"
@@ -411,17 +426,52 @@ out body;`,
     if (match) setCounty(match)
   }, [counties, detectedLocation])
 
+  // Returns device/browser-specific steps for re-enabling location access.
+  // Shown only when the permission is blocked — keeps the message actionable.
+  function getLocationHint() {
+    const ua = navigator.userAgent
+    const isIOS     = /iPad|iPhone|iPod/.test(ua)
+    const isAndroid = /Android/.test(ua)
+    const isSafari  = /Safari/.test(ua) && !/Chrome|CriOS|FxiOS|EdgiOS/.test(ua)
+
+    if (isIOS && isSafari)  return 'To fix: iPhone Settings → Privacy & Security → Location Services → Safari → "While Using"'
+    if (isIOS)              return 'To fix: iPhone Settings → find your browser app → Location → "While Using"'
+    if (isAndroid)          return 'To fix: tap the lock icon in your address bar → Permissions → Location → Allow'
+    if (isSafari)           return 'To fix: Safari menu → Settings for This Website → Location → Allow'
+    return 'To fix: click the lock icon in your address bar → Site settings → Location → Allow'
+  }
+
   // Use the browser's Geolocation API to detect the user's location.
   // On iOS/Android, this prompts "Allow location access?".
   // We then reverse-geocode the coordinates to a state/county/city name
   // using the free Nominatim API from OpenStreetMap.
-  function detectLocation() {
+  async function detectLocation() {
     if (!navigator.geolocation) {
       setLocationError('Geolocation is not supported by this browser.')
       return
     }
-    setDetectingLocation(true)
+
+    // Reset denial flag each time the user tries again
+    setLocationDenied(false)
     setLocationError(null)
+
+    // Check the permission state before requesting — if already permanently denied,
+    // the browser silently skips the prompt and jumps straight to the error callback,
+    // leaving users confused about why it failed. Detecting 'denied' upfront lets us
+    // show actionable settings instructions immediately.
+    if ('permissions' in navigator) {
+      try {
+        const perm = await navigator.permissions.query({ name: 'geolocation' })
+        if (perm.state === 'denied') {
+          setLocationError('Location access is blocked for this site.')
+          setLocationDenied(true)
+          setShowManualState(true)
+          return
+        }
+      } catch { /* Permissions API not supported — fall through to normal request */ }
+    }
+
+    setDetectingLocation(true)
 
     navigator.geolocation.getCurrentPosition(
       async ({ coords }) => {  // success callback — receives { latitude, longitude }
@@ -451,10 +501,12 @@ out body;`,
         }
         setDetectingLocation(false)
       },
-      (err) => {  // error callback — called if user denies permission
+      (err) => {  // error callback — called if user denies or OS blocks the request
         setDetectingLocation(false)
         if (err.code === 1) {
-          setLocationError('Location access denied. Select your state manually.')
+          // PERMISSION_DENIED: user tapped "Don't Allow" on this specific prompt
+          setLocationError('Location access was denied.')
+          setLocationDenied(true)
         } else {
           setLocationError('Could not get location. Select your state manually.')
         }
@@ -794,7 +846,14 @@ out body;`,
                     : <><span className="location-pin-icon">📍</span> Use My Location</>
                   }
                 </button>
-                {locationError && <p className="location-error">{locationError}</p>}
+                {locationError && (
+                  <div className="location-error-block">
+                    <p className="location-error">{locationError}</p>
+                    {locationDenied && (
+                      <p className="location-hint">{getLocationHint()}</p>
+                    )}
+                  </div>
+                )}
 
                 {/* Show the manual state dropdown only if location failed or user chose it */}
                 {showManualState ? (
