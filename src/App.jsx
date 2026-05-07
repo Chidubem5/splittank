@@ -82,6 +82,10 @@ function mostCommonTrimIdx(opts) {
   return bestIdx
 }
 
+// True only on iOS Safari 14.5+ and Android Chrome — the only browsers that
+// implement the Web Contact Picker API. Evaluated once at render time.
+const supportsContactPicker = 'contacts' in navigator && typeof navigator.contacts?.select === 'function'
+
 export default function App() {
 
   // ── Trip state ────────────────────────────────────────────────────────────
@@ -1315,10 +1319,12 @@ out body;`,
             </div>
           </div>
 
-          {/* Sync Contacts button — fills Zelle/Apple Pay from phone contacts & stores passengers */}
-          <button type="button" className="sync-contacts-btn" onClick={syncContacts}>
-            📇 Sync Contacts
-          </button>
+          {/* Sync Contacts button — only rendered on iOS Safari / Android Chrome */}
+          {supportsContactPicker && (
+            <button type="button" className="sync-contacts-btn" onClick={syncContacts}>
+              📇 Sync Contacts
+            </button>
+          )}
 
           {/* PaymentButtons only renders when there's a result to pay for */}
           {liveResult && (
