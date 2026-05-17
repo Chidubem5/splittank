@@ -16,8 +16,9 @@
 // In production, set it in the Vercel dashboard under Environment Variables.
 const EIA_KEY = import.meta.env.VITE_EIA_API_KEY
 
-// How long a cached price stays fresh (24 hours in milliseconds)
-const CACHE_TTL = 86_400_000
+// Cache TTLs
+const CACHE_TTL     = 86_400_000  // 24 hours — EIA (weekly data, no point refreshing faster)
+const AAA_CACHE_TTL = 21_600_000  // 6 hours  — AAA (daily data, check a few times per day)
 
 // ─────────────────────────────────────────
 // EIA area codes for each state.
@@ -208,12 +209,48 @@ async function fetchArea(area) {
 }
 
 // ─────────────────────────────────────────
-// fetchAllStatePrices — batch fetch for the heat map
-// Fetches the latest weekly price for every state + PADD region in ONE
-// API request (multi-duoarea filter). Returns { StateName: price } or null.
-// Uses the same 24-hour localStorage cache as the single-state fetcher.
+// fetchAAAprices — fetch all 50-state daily prices from our Vercel proxy
+// The proxy (/api/gas-prices) scrapes AAA server-side and caches at the CDN
+// for 6 hours. We also cache the result in localStorage for 6 hours so
+// repeated page loads within that window make zero network requests.
+// Returns { prices: { StateName: price }, date: "May 17" } or null on failure.
+// ─────────────────────────────────────────
+async function fetchAAAprices() {
+  const CACHE_KEY = 'aaa_prices_v1'
+  try {
+    const raw = localStorage.getItem(CACHE_KEY)
+    if (raw) {
+      const c = JSON.parse(raw)
+      if (Date.now() - c.t < AAA_CACHE_TTL) return { prices: c.prices, date: c.date }
+    }
+  } catch {}
+
+  try {
+    const res = await fetch('/api/gas-prices')
+    if (!res.ok) return null
+    const data = await res.json()
+    if (!data.prices || Object.keys(data.prices).length < 40) return null
+    try {
+      localStorage.setItem(CACHE_KEY, JSON.stringify({ prices: data.prices, date: data.date, t: Date.now() }))
+    } catch {}
+    return { prices: data.prices, date: data.date }
+  } catch {
+    return null
+  }
+}
+
+// ─────────────────────────────────────────
+// fetchAllStatePrices — all-state prices for the heat map
+// Tries AAA first (daily, all 50 states in one call).
+// Falls back to a single EIA batch request if AAA is unavailable.
+// Returns { StateName: price } or null.
 // ─────────────────────────────────────────
 export async function fetchAllStatePrices() {
+  // AAA: daily data, all states at once
+  const aaa = await fetchAAAprices()
+  if (aaa?.prices && Object.keys(aaa.prices).length >= 40) return aaa.prices
+
+  // EIA fallback: weekly batch fetch
   if (!EIA_KEY) return null
 
   const CACHE_KEY = 'eia_all_states_v1'
@@ -225,49 +262,32 @@ export async function fetchAllStatePrices() {
     }
   } catch {}
 
-  // Collect every unique area code: all state codes + all PADD sub-regions
   const allAreas = [...new Set([
     ...Object.values(STATE_AREA),
     ...Object.values(PADD_FALLBACK),
   ])]
-
   const areaParams = allAreas.map(a => `&facets[duoarea][]=${a}`).join('')
   const url =
     `https://api.eia.gov/v2/petroleum/pri/gnd/data/` +
-    `?api_key=${EIA_KEY}` +
-    `&frequency=weekly` +
-    `&data[0]=value` +
-    `&facets[product][]=EPM0` +
+    `?api_key=${EIA_KEY}&frequency=weekly&data[0]=value&facets[product][]=EPM0` +
     areaParams +
-    `&sort[0][column]=period` +
-    `&sort[0][direction]=desc` +
-    `&length=200`  // enough to get the latest entry for every area
+    `&sort[0][column]=period&sort[0][direction]=desc&length=200`
 
   try {
     const res = await fetch(url)
     if (!res.ok) return null
     const rows = (await res.json())?.response?.data ?? []
-
-    // Pick the most-recent price per area code (rows are sorted newest-first)
     const areaPrice = {}
     for (const row of rows) {
-      const code = row.duoarea
-      if (code && row.value != null && !areaPrice[code]) {
-        areaPrice[code] = parseFloat(row.value)
-      }
+      if (row.duoarea && row.value != null && !areaPrice[row.duoarea])
+        areaPrice[row.duoarea] = parseFloat(row.value)
     }
-
-    // Map area prices back to state names using the same fallback chain
     const prices = {}
     for (const [stateName, area] of Object.entries(STATE_AREA)) {
       const price = areaPrice[area] ?? areaPrice[PADD_FALLBACK[area]] ?? null
       if (price != null) prices[stateName] = price
     }
-
-    try {
-      localStorage.setItem(CACHE_KEY, JSON.stringify({ prices, t: Date.now() }))
-    } catch {}
-
+    try { localStorage.setItem(CACHE_KEY, JSON.stringify({ prices, t: Date.now() })) } catch {}
     return prices
   } catch {
     return null
@@ -276,54 +296,61 @@ export async function fetchAllStatePrices() {
 
 // ─────────────────────────────────────────
 // fetchStateGasPrice — main exported function
-// Resolves the best available gas price for a given state + optional county.
-// The three-level fallback ensures we always return something useful:
-//   Level 1: metro area price (only if county is in a known metro)
-//   Level 2: state-level price (only ~9 states have this)
-//   Level 3: PADD sub-region price (covers all remaining states)
-// Returns null if EIA_KEY is missing (app will use static fallback instead).
+// Priority order for best accuracy:
+//   1. EIA metro area  — most granular (major city counties only)
+//   2. AAA state       — daily, state-level, accurate for all 50 states
+//   3. EIA state/PADD  — weekly fallback; PADD can skew for outlier states like AK
+// Returns { price, period, label, source } or null (caller uses static fallback).
 // ─────────────────────────────────────────
 export async function fetchStateGasPrice(stateName, county = null) {
-  if (!EIA_KEY) return null   // no API key — let the caller use the static prices
-
   const area = STATE_AREA[stateName]
-  if (!area) return null   // unrecognized state
+  if (!area) return null
 
-  // Determine if the county maps to a metro area code
   const metroArea = county
     ? (COUNTY_METRO[`${normalizeCounty(county)}|${stateName}`] ?? null)
     : null
 
-  try {
-    // ── Level 1: Try metro area ───────────────────────────────────────
-    if (metroArea) {
-      const cached = getCached(`eia_${metroArea}`)
-      if (cached) return cached   // cache hit — return immediately
+  // ── Level 1: EIA metro (most granular — city-level accuracy) ─────────────
+  if (EIA_KEY && metroArea) {
+    const cached = getCached(`eia_${metroArea}`)
+    if (cached) return { ...cached, source: 'EIA' }
+    try {
       const r = await fetchArea(metroArea)
       if (r) {
         const result = { ...r, label: METRO_LABELS[metroArea] }
         setCached(`eia_${metroArea}`, result)
-        return result
+        return { ...result, source: 'EIA' }
       }
+    } catch {}
+  }
+
+  // ── Level 2: AAA state (daily — best for state-level accuracy) ───────────
+  const aaa = await fetchAAAprices()
+  if (aaa?.prices?.[stateName]) {
+    return {
+      price:  aaa.prices[stateName],
+      period: new Date().toISOString().split('T')[0],  // today's date in YYYY-MM-DD
+      label:  null,
+      source: 'AAA',
     }
+  }
 
-    // ── Level 2: Try state-level ──────────────────────────────────────
+  // ── Level 3: EIA state / PADD fallback (weekly) ──────────────────────────
+  if (!EIA_KEY) return null
+  try {
     const cached = getCached(`eia_${area}`)
-    if (cached) return cached
+    if (cached) return { ...cached, source: 'EIA' }
     const r = await fetchArea(area)
-    if (r) { setCached(`eia_${area}`, r); return r }
+    if (r) { setCached(`eia_${area}`, r); return { ...r, source: 'EIA' } }
 
-    // ── Level 3: PADD sub-region fallback ────────────────────────────
     const paddArea = PADD_FALLBACK[area]
     if (paddArea) {
-      const cached = getCached(`eia_${paddArea}`)
-      if (cached) return cached
-      const r = await fetchArea(paddArea)
-      if (r) { setCached(`eia_${paddArea}`, r); return r }
+      const paddCached = getCached(`eia_${paddArea}`)
+      if (paddCached) return { ...paddCached, source: 'EIA' }
+      const pr = await fetchArea(paddArea)
+      if (pr) { setCached(`eia_${paddArea}`, pr); return { ...pr, source: 'EIA' } }
     }
+  } catch {}
 
-    return null   // all three levels failed
-  } catch {
-    return null   // network error — let the caller use static prices
-  }
+  return null
 }

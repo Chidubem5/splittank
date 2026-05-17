@@ -90,8 +90,9 @@ export default function App() {
   const [state,         setState]         = useState('')    // US state name
   const [gasPrice,      setGasPrice]      = useState('')    // $/gallon
   const [customGas,     setCustomGas]     = useState(false) // true if user manually typed a price
-  const [livePriceDate, setLivePriceDate] = useState(null)  // "Apr 14" — when EIA data was published
-  const [livePriceLabel,setLivePriceLabel]= useState(null)  // "Los Angeles metro" — data source label
+  const [livePriceDate, setLivePriceDate]   = useState(null)  // "Apr 14" — when data was published
+  const [livePriceLabel, setLivePriceLabel] = useState(null)  // "Los Angeles metro" — metro label
+  const [livePriceSource, setLivePriceSource] = useState(null) // 'AAA' | 'EIA' | null
 
   // ── Car state (cascading dropdowns) ──────────────────────────────────────
   // Loading these in sequence: year → makes → models → options → MPG.
@@ -575,13 +576,14 @@ out body;`,
     if (!state || customGas) return
     setLivePriceDate(null)
     setLivePriceLabel(null)
+    setLivePriceSource(null)
     fetchStateGasPrice(state, county || null).then(result => {
       if (result) {
-        setGasPrice(result.price.toFixed(2))        // e.g. "3.45"
+        setGasPrice(result.price.toFixed(2))
         setLivePriceDate(formatEIADate(result.period))
         setLivePriceLabel(result.label ?? null)
+        setLivePriceSource(result.source ?? null)
       } else {
-        // API unavailable — use the hardcoded state average
         setGasPrice(STATE_GAS_PRICES[state]?.toFixed(2) ?? '')
       }
     })
@@ -893,7 +895,7 @@ out body;`,
               {state && !customGas && (
                 <span className="badge">
                   {livePriceDate
-                    ? `Live · ${livePriceDate}${livePriceLabel ? ` · ${livePriceLabel}` : ''}`
+                    ? `${livePriceSource === 'AAA' ? 'AAA' : 'EIA'} · ${livePriceDate}${livePriceLabel ? ` · ${livePriceLabel}` : ''}`
                     : 'State avg'}
                 </span>
               )}
@@ -924,12 +926,13 @@ out body;`,
                   setCustomGas(false)
                   setLivePriceDate(null)
                   setLivePriceLabel(null)
-                  // Re-run the gas price fetch (same logic as the effect above)
+                  setLivePriceSource(null)
                   fetchStateGasPrice(state, county || null).then(result => {
                     if (result) {
                       setGasPrice(result.price.toFixed(2))
                       setLivePriceDate(formatEIADate(result.period))
                       setLivePriceLabel(result.label ?? null)
+                      setLivePriceSource(result.source ?? null)
                     } else {
                       setGasPrice(STATE_GAS_PRICES[state]?.toFixed(2) ?? '')
                     }
@@ -1409,7 +1412,7 @@ out body;`,
       <RoadGallery />
 
       <footer className="app-footer">
-        Gas prices are fetched live from EIA weekly data — every Monday.
+        Gas prices sourced from AAA (daily) with EIA as fallback.
       </footer>
 
       {/* Modals — each renders as an overlay on top of the page.
