@@ -12,7 +12,7 @@ export default async function handler(req, res) {
   // s-maxage: Vercel CDN caches this for 6 hours
   // stale-while-revalidate: serve the old response for up to 24 more hours
   // while a fresh fetch runs in the background — zero latency for users
-  res.setHeader('Cache-Control', 's-maxage=21600, stale-while-revalidate=86400')
+  res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate=7200')
 
   try {
     const resp = await fetch('https://gasprices.aaa.com/state-gas-price-averages/', {

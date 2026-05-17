@@ -18,7 +18,7 @@ const EIA_KEY = import.meta.env.VITE_EIA_API_KEY
 
 // Cache TTLs
 const CACHE_TTL     = 86_400_000  // 24 hours — EIA (weekly data, no point refreshing faster)
-const AAA_CACHE_TTL = 21_600_000  // 6 hours  — AAA (daily data, check a few times per day)
+const AAA_CACHE_TTL =  3_600_000  // 1 hour   — AAA (daily data, stays fresh throughout the day)
 
 // ─────────────────────────────────────────
 // EIA area codes for each state.
