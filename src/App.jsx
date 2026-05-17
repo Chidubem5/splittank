@@ -127,6 +127,10 @@ export default function App() {
   const [zelleContacts,  setZelleContacts]  = useState([''])
   const [appleContacts,  setAppleContacts]  = useState([''])
 
+  // ── Passenger phone numbers for payment requests ──────────────────────────
+  const [passengerPhones, setPassengerPhones] = useState([''])
+  const [sentPhones,      setSentPhones]      = useState(new Set())
+
 // ── Tolls ─────────────────────────────────────────────────────────────────
   const [tolls,          setTolls]          = useState('')
   const [tollsEstimated, setTollsEstimated] = useState(false) // true when auto-filled from route
@@ -214,6 +218,25 @@ export default function App() {
   function removeContact(setter, idx) { setter(prev => prev.filter((_, i) => i !== idx)) }
   function updateContact(setter, idx, val) {
     setter(prev => prev.map((v, i) => i === idx ? val : v))
+  }
+
+  // Build and open a pre-filled SMS to a passenger asking them to pay their share.
+  // Picks the best available payment method: Venmo > Cash App > generic.
+  // Includes trip context (miles, car) so passengers know exactly what they're paying for.
+  function sendPaymentRequest(phone, result) {
+    const venmo    = venmoHandles.find(h => h.trim())
+    const cashApp  = cashAppHandles.find(h => h.trim())
+    const amount   = result.perPerson.toFixed(2)
+    const tripInfo = `${Math.round(result.miles)}-mile trip, ${result.mpg} mpg`
+    let msg
+    if (venmo) {
+      msg = `Hey! Your gas share for our ${tripInfo} is $${amount}. Tap to pay on Venmo: https://venmo.com/u/${venmo}?txn=pay&amount=${amount}&note=Split%20Tank — or search @${venmo} in the Venmo app.`
+    } else if (cashApp) {
+      msg = `Hey! Your gas share for our ${tripInfo} is $${amount}. Tap to pay on Cash App: https://cash.app/$${cashApp}/${amount} — or search $${cashApp} in Cash App.`
+    } else {
+      msg = `Hey! Your gas share for our ${tripInfo} is $${amount}. Pay me back when you get a chance — calculated on Split Tank (splittank.com)`
+    }
+    window.location.href = `sms:${phone}?body=${encodeURIComponent(msg)}`
   }
 
   // ── Route calculator ──────────────────────────────────────────────────────
@@ -1279,8 +1302,8 @@ out body;`,
             </div>
           </div>
 
-          {/* PaymentButtons only renders when there's a result to pay for */}
-          {liveResult && (
+          {/* Send your share — appears once the calculator has a result */}
+          {liveResult ? (
             <PaymentButtons
               amount={liveResult.perPerson.toFixed(2)}
               venmoHandle={venmoHandles.find(h => h.trim()) || ''}
@@ -1288,6 +1311,84 @@ out body;`,
               zelleContact={zelleContacts.find(c => c.trim()) || ''}
               appleContact={appleContacts.find(c => c.trim()) || ''}
             />
+          ) : (
+            <p className="payment-pending-hint">
+              Fill in the trip details above to unlock the send button.
+            </p>
+          )}
+
+          {/* ── REQUEST FROM PASSENGERS ──────────────────────────────────── */}
+          {liveResult && (
+            <div className="request-section">
+              <p className="payment-heading">Request from passengers</p>
+              <p className="payment-info-hint" style={{ marginBottom: 10 }}>
+                Enter each passenger's phone number and tap Send — they'll get
+                a text with the amount and a direct payment link.
+              </p>
+              {passengerPhones.map((phone, i) => {
+                const wasSent = sentPhones.has(i)
+                return (
+                  <div className="request-row" key={i}>
+                    <input
+                      type="tel"
+                      placeholder="Phone number"
+                      value={phone}
+                      onChange={e => {
+                        updateContact(setPassengerPhones, i, e.target.value)
+                        setSentPhones(prev => { const n = new Set(prev); n.delete(i); return n })
+                      }}
+                      className="request-phone-input"
+                    />
+                    <button
+                      type="button"
+                      className={`request-send-btn${wasSent ? ' sent' : ''}`}
+                      disabled={!phone.trim()}
+                      onClick={() => {
+                        sendPaymentRequest(phone.trim(), liveResult)
+                        setSentPhones(prev => new Set(prev).add(i))
+                      }}
+                    >
+                      {wasSent ? 'Sent ✓' : 'Send'}
+                    </button>
+                    {passengerPhones.length > 1 && (
+                      <button
+                        type="button"
+                        className="remove-contact-btn"
+                        onClick={() => {
+                          removeContact(setPassengerPhones, i)
+                          setSentPhones(prev => { const n = new Set(prev); n.delete(i); return n })
+                        }}
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                )
+              })}
+              <button
+                type="button"
+                className="add-contact-btn"
+                onClick={() => addContact(setPassengerPhones)}
+              >
+                + add passenger
+              </button>
+
+              {/* Fallback: show the handle as plain text so passengers can copy it manually */}
+              {(venmoHandles.find(h => h.trim()) || cashAppHandles.find(h => h.trim()) || zelleContacts.find(c => c.trim())) && (
+                <div className="request-fallback">
+                  <p className="request-fallback-label">If the link doesn't open, share your handle directly:</p>
+                  {venmoHandles.find(h => h.trim()) && (
+                    <span className="request-fallback-handle">Venmo: @{venmoHandles.find(h => h.trim())}</span>
+                  )}
+                  {cashAppHandles.find(h => h.trim()) && (
+                    <span className="request-fallback-handle">Cash App: ${cashAppHandles.find(h => h.trim())}</span>
+                  )}
+                  {zelleContacts.find(c => c.trim()) && (
+                    <span className="request-fallback-handle">Zelle: {zelleContacts.find(c => c.trim())}</span>
+                  )}
+                </div>
+              )}
+            </div>
           )}
 
         </section>

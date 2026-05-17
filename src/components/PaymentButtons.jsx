@@ -84,6 +84,7 @@ export default function PaymentButtons({ amount, venmoHandle, cashAppHandle, zel
   const [selected, setSelected] = useState(null)
   const [open, setOpen]         = useState(false)
   const [toast, setToast]       = useState(null)
+  const [didSend, setDidSend]   = useState(false)
   const pickerRef               = useRef(null)
 
   useEffect(() => {
@@ -114,6 +115,7 @@ export default function PaymentButtons({ amount, venmoHandle, cashAppHandle, zel
 
     setToast(selected.toast(amount, handle))
     setTimeout(() => setToast(null), 4500)
+    setDidSend(true)
 
     const url = selected.getUrl(handle, amount)
     if (selected.id === 'applepay') {
@@ -192,6 +194,23 @@ export default function PaymentButtons({ amount, venmoHandle, cashAppHandle, zel
       )}
 
       {toast && <div className="payment-toast" role="status">{toast}</div>}
+
+      {/* After sending, show the handle as text so they can manually search if the deep link failed */}
+      {didSend && selected && (() => {
+        const handle =
+          selected.id === 'venmo'    ? venmoHandle :
+          selected.id === 'cashapp'  ? cashAppHandle :
+          selected.id === 'zelle'    ? zelleContact : null
+        if (!handle) return null
+        const prefix =
+          selected.id === 'venmo'   ? '@' :
+          selected.id === 'cashapp' ? '$' : ''
+        return (
+          <p className="payment-fallback">
+            If it didn't open, search <strong>{prefix}{handle}</strong> in {selected.name}.
+          </p>
+        )
+      })()}
     </div>
   )
 }
