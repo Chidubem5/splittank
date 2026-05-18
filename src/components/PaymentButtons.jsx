@@ -92,10 +92,11 @@ export default function PaymentButtons({ amount, venmoHandle, cashAppHandle, zel
     fire(`Copied "${zelleContact}" — paste it into your bank's Zelle`, 'zelle')
   }
 
-  // Use appleContact as the SMS target first; fall back to zelleContact if it's a phone number.
-  const smsPhone     = appleContact || (zelleContact && isPhone(zelleContact) ? zelleContact : null)
-  const zelleIsEmail = zelleContact && !isPhone(zelleContact)
-  const hasAny       = venmoHandle || cashAppHandle || smsPhone || zelleIsEmail
+  // SMS is only for Apple Pay (driver's phone number for iMessage).
+  // Zelle shows a copy button for both phone numbers and emails — Zelle accepts both.
+  const smsPhone = appleContact || null
+  const hasZelle = !!zelleContact
+  const hasAny   = venmoHandle || cashAppHandle || smsPhone || hasZelle
 
   return (
     <div className="payment-section">
@@ -143,8 +144,8 @@ export default function PaymentButtons({ amount, venmoHandle, cashAppHandle, zel
             </button>
           )}
 
-          {/* Zelle email — no deep link possible, copy to clipboard instead */}
-          {zelleIsEmail && (
+          {/* Zelle — no universal deep link, so copy the contact (phone or email) to clipboard */}
+          {hasZelle && (
             <button
               className="payment-direct-btn"
               style={{ '--btn-accent': '#6D1ED4' }}
