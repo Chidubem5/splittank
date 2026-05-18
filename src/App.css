@@ -860,118 +860,59 @@ input[type="number"]:disabled { opacity: 0.4; cursor: not-allowed; }
   margin-bottom: 8px;
 }
 
-/* Picker wrapper — anchors the dropdown */
-.payment-picker { position: relative; }
+/* Stack of direct pay buttons — one per filled-in payment method */
+.payment-direct-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
 
-/* Trigger button — styled to match the site's form inputs */
-.payment-method-btn {
+.payment-direct-btn {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 12px;
   width: 100%;
-  padding: 11px 13px;
-  border-radius: var(--radius-sm);
-  border: 1.5px solid var(--border);
-  background: var(--card);
-  cursor: pointer;
-  font-family: inherit;
-  transition: border-color 0.15s, box-shadow 0.15s;
-  text-align: left;
-}
-.payment-method-btn:hover { border-color: var(--blue-dark); }
-.payment-method-btn.is-open,
-.payment-method-btn:focus-visible {
-  border-color: var(--blue-dark);
-  box-shadow: 0 0 0 3px var(--blue-light);
-  outline: none;
-}
-
-/* Icon inside trigger and dropdown rows */
-.pmb-icon { width: 22px; height: 22px; flex-shrink: 0; display: flex; }
-.pmb-icon svg { width: 22px; height: 22px; display: block; }
-
-.pmb-label {
-  flex: 1;
-  font-size: 0.95rem;
-  font-weight: 700;
-  color: var(--text);
-}
-.pmb-placeholder {
-  flex: 1;
-  font-size: 0.95rem;
-  color: var(--text-muted);
-}
-.pmb-chevron { flex-shrink: 0; color: var(--text-muted); }
-
-/* Dropdown — matches .user-dropdown */
-.payment-dropdown {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  right: 0;
-  z-index: 200;
-  background: var(--card);
-  border: 2px solid var(--border);
-  border-radius: var(--radius-sm);
-  box-shadow: var(--shadow);
-  list-style: none;
-  margin: 0;
-  padding: 4px;
-  animation: fadeIn 0.15s ease;
-}
-.payment-option {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: background 0.1s;
-}
-.payment-option + .payment-option { margin-top: 1px; }
-.payment-option:hover { background: var(--blue-light); }
-.payment-option.is-active { background: var(--blue-light); }
-
-.pdo-name {
-  flex: 1;
-  font-size: 0.9rem;
-  font-weight: 700;
-  color: var(--text);
-}
-
-/* Pay CTA button — brand color bg, white text */
-.payment-pay-btn {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  margin-top: 8px;
-  padding: 14px 16px;
+  padding: 13px 16px;
   border-radius: var(--radius-sm);
   border: none;
-  background: var(--pay-accent);
+  background: var(--btn-accent);
   color: white;
   cursor: pointer;
   font-family: inherit;
   min-height: 52px;
+  text-align: left;
   transition: filter 0.15s, transform 0.1s, box-shadow 0.15s;
 }
-.payment-pay-btn:hover {
-  filter: brightness(1.08);
+.payment-direct-btn:hover {
+  filter: brightness(1.1);
   transform: translateY(-1px);
   box-shadow: 0 4px 14px rgba(0,0,0,0.22);
 }
-.payment-pay-btn:active { transform: scale(0.98); filter: brightness(0.95); }
+.payment-direct-btn:active { transform: scale(0.98); filter: brightness(0.95); }
 
-/* Icon inside the pay button */
-.ppb-icon { width: 28px; height: 28px; flex-shrink: 0; display: flex; }
-.ppb-icon svg { width: 28px; height: 28px; display: block; }
+.pdb-icon { width: 28px; height: 28px; flex-shrink: 0; display: flex; }
+.pdb-icon svg { width: 28px; height: 28px; display: block; }
 
-.ppb-text {
+.pdb-text {
   flex: 1;
-  font-size: 1rem;
+  font-size: 0.95rem;
   font-weight: 800;
-  text-align: left;
+}
+
+.pdb-copy-icon {
+  font-size: 1.1rem;
+  opacity: 0.8;
+  flex-shrink: 0;
+}
+
+/* Shown when no payment info has been entered yet */
+.payment-no-methods {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 14px;
+  border: 1.5px dashed var(--border);
+  border-radius: var(--radius-sm);
 }
 
 /* Toast */
@@ -1562,9 +1503,10 @@ input[type="number"]:disabled { opacity: 0.4; cursor: not-allowed; }
   .stat              { padding: 13px 10px; }
 
   /* ── Payment — mobile tweaks ── */
-  .payment-pay-btn { padding: 13px 14px; min-height: 52px; }
-  .ppb-icon { width: 26px; height: 26px; }
-  .ppb-icon svg { width: 26px; height: 26px; }
+  .payment-direct-btn { min-height: 54px; padding: 13px 14px; }
+  .pdb-icon { width: 26px; height: 26px; }
+  .pdb-icon svg { width: 26px; height: 26px; }
+  .pdb-text { font-size: 1rem; }
 
   /* ── Payment handle inputs ── */
   .payment-handles { grid-template-columns: 1fr; }

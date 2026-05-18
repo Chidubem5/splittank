@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState } from 'react'
 
 function VenmoIcon() {
   return (
@@ -27,190 +27,156 @@ function ZelleIcon() {
   )
 }
 
-function ApplePayIcon() {
+function MessageIcon() {
   return (
     <svg viewBox="0 0 32 32" fill="none" aria-hidden="true">
-      <rect width="32" height="32" rx="7" fill="#1A1A1A" />
-      <path d="M16 8.5c.8-1 2-1.5 3.3-1.4-.2 1.4-.8 2.6-1.6 3.4-.8.9-2 1.4-3.2 1.3.1-1.3.7-2.5 1.5-3.3z" fill="white" />
-      <path d="M20.5 12.8c-1.5-.9-3.5-.8-5 .1-1-.6-2.1-.9-3.2-.7C10 12.8 8.5 15 8.5 17.4c0 1.6.6 3.5 1.5 4.9.8 1.2 1.6 1.7 2.2 1.7.7 0 1-.4 2-.4.9 0 1.2.4 2 .4.7 0 1.5-.6 2.3-1.8.5-.8.9-1.6 1.2-2.6-1.2-.5-2-1.7-2-3.1 0-1.3.7-2.4 1.8-3z" fill="white" />
+      <rect width="32" height="32" rx="7" fill="#34C759" />
+      <path d="M7 9h18a1.5 1.5 0 0 1 1.5 1.5v10A1.5 1.5 0 0 1 25 22H12l-6 4V10.5A1.5 1.5 0 0 1 7 9z" fill="white" />
     </svg>
   )
 }
 
-const METHODS = [
-  {
-    id: 'venmo',
-    name: 'Venmo',
-    Icon: VenmoIcon,
-    accent: '#3D95CE',
-    copyAmount: true,
-    getUrl: (handle, amount) =>
-      handle ? `https://venmo.com/u/${handle}?txn=pay&amount=${amount}&note=Split%20Tank` : 'https://venmo.com/',
-    toast: (amount, handle) =>
-      handle ? 'Opening Venmo — amount pre-filled' : `Copied $${amount} — opening Venmo`,
-  },
-  {
-    id: 'cashapp',
-    name: 'Cash App',
-    Icon: CashAppIcon,
-    accent: '#00C244',
-    copyAmount: true,
-    getUrl: (handle, amount) =>
-      handle ? `https://cash.app/$${handle}/${amount}` : 'https://cash.app/',
-    toast: (amount, handle) =>
-      handle ? 'Opening Cash App — amount pre-filled' : `Copied $${amount} — opening Cash App`,
-  },
-  {
-    id: 'zelle',
-    name: 'Zelle',
-    Icon: ZelleIcon,
-    accent: '#6D1ED4',
-    copyAmount: true,
-    getUrl: () => 'https://www.zellepay.com/',
-    toast: (amount) => `Copied $${amount} — paste in your bank's Zelle`,
-  },
-  {
-    id: 'applepay',
-    name: 'Apple Pay',
-    Icon: ApplePayIcon,
-    accent: '#1A1A1A',
-    copyAmount: false,
-    getUrl: (_, amount) => `sms:?body=${encodeURIComponent(`Here's my gas share: $${amount}`)}`,
-    toast: () => 'Opening iMessage — select a contact and tap send',
-  },
-]
+function ArrowIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" style={{ opacity: 0.75, flexShrink: 0 }}>
+      <path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+// Returns true if the string looks like a phone number (not an email).
+// Used to decide whether a zelleContact should open SMS or just be copied.
+function isPhone(str) {
+  const digits = str.replace(/\D/g, '')
+  return digits.length >= 7 && /^[\d\s\-().+]+$/.test(str.trim())
+}
 
 export default function PaymentButtons({ amount, venmoHandle, cashAppHandle, zelleContact, appleContact }) {
-  const [selected, setSelected] = useState(null)
-  const [open, setOpen]         = useState(false)
-  const [toast, setToast]       = useState(null)
-  const [didSend, setDidSend]   = useState(false)
-  const pickerRef               = useRef(null)
+  const [toast, setToast]           = useState(null)
+  const [lastClicked, setLastClicked] = useState(null) // tracks which button was last tapped for fallback hint
 
-  useEffect(() => {
-    if (!open) return
-    function onOutside(e) {
-      if (pickerRef.current && !pickerRef.current.contains(e.target)) setOpen(false)
-    }
-    document.addEventListener('mousedown', onOutside)
-    return () => document.removeEventListener('mousedown', onOutside)
-  }, [open])
-
-  function pick(method) {
-    setSelected(method)
-    setOpen(false)
-  }
-
-  async function handlePay() {
-    if (!selected) return
-    const handle =
-      selected.id === 'venmo'    ? venmoHandle :
-      selected.id === 'cashapp'  ? cashAppHandle :
-      selected.id === 'zelle'    ? zelleContact :
-      selected.id === 'applepay' ? appleContact : null
-
-    if (selected.copyAmount) {
-      try { await navigator.clipboard.writeText(amount) } catch { /* ignore */ }
-    }
-
-    setToast(selected.toast(amount, handle))
+  function fire(msg, key) {
+    setToast(msg)
+    setLastClicked(key)
     setTimeout(() => setToast(null), 4500)
-    setDidSend(true)
-
-    const url = selected.getUrl(handle, amount)
-    if (selected.id === 'applepay') {
-      window.location.href = url
-    } else {
-      window.open(url, '_blank', 'noopener,noreferrer')
-    }
   }
+
+  function openVenmo() {
+    window.open(
+      `https://venmo.com/u/${venmoHandle}?txn=pay&amount=${amount}&note=Split%20Tank`,
+      '_blank', 'noopener,noreferrer'
+    )
+    fire('Opening Venmo — recipient and amount pre-filled', 'venmo')
+  }
+
+  function openCashApp() {
+    window.open(
+      `https://cash.app/$${cashAppHandle}/${amount}`,
+      '_blank', 'noopener,noreferrer'
+    )
+    fire('Opening Cash App — recipient and amount pre-filled', 'cashapp')
+  }
+
+  // Opens the native Messages app addressed to the driver's phone number.
+  // On iPhone this lets the passenger send an Apple Pay payment or just notify.
+  function openSMS(phone) {
+    const body = `Here's my gas share: $${amount} — sent via Split Tank (splittank.com)`
+    window.location.href = `sms:${encodeURIComponent(phone)}?body=${encodeURIComponent(body)}`
+    fire('Opening Messages — tap send when ready', 'sms')
+  }
+
+  // Zelle has no web deep link, so we copy the contact info to clipboard
+  // so the passenger can paste it into their bank's Zelle flow.
+  async function copyZelle() {
+    try { await navigator.clipboard.writeText(zelleContact) } catch { /* ignore */ }
+    fire(`Copied "${zelleContact}" — paste it into your bank's Zelle`, 'zelle')
+  }
+
+  // Use appleContact as the SMS target first; fall back to zelleContact if it's a phone number.
+  const smsPhone     = appleContact || (zelleContact && isPhone(zelleContact) ? zelleContact : null)
+  const zelleIsEmail = zelleContact && !isPhone(zelleContact)
+  const hasAny       = venmoHandle || cashAppHandle || smsPhone || zelleIsEmail
 
   return (
     <div className="payment-section">
       <p className="payment-heading">Send your share</p>
 
-      {/* Picker */}
-      <div className="payment-picker" ref={pickerRef}>
-        <button
-          className={`payment-method-btn${open ? ' is-open' : ''}`}
-          onClick={() => setOpen(o => !o)}
-          aria-haspopup="listbox"
-          aria-expanded={open}
-        >
-          {selected ? (
-            <>
-              <span className="pmb-icon"><selected.Icon /></span>
-              <span className="pmb-label">{selected.name}</span>
-            </>
-          ) : (
-            <span className="pmb-placeholder">Choose a payment app…</span>
+      {hasAny ? (
+        <div className="payment-direct-list">
+
+          {venmoHandle && (
+            <button
+              className="payment-direct-btn"
+              style={{ '--btn-accent': '#3D95CE' }}
+              onClick={openVenmo}
+              aria-label={`Pay $${amount} via Venmo to @${venmoHandle}`}
+            >
+              <span className="pdb-icon"><VenmoIcon /></span>
+              <span className="pdb-text">Pay ${amount} via Venmo</span>
+              <ArrowIcon />
+            </button>
           )}
-          <svg className="pmb-chevron" width="12" height="12" viewBox="0 0 12 12" fill="none">
-            <path
-              d={open ? 'M2 8l4-4 4 4' : 'M2 4l4 4 4-4'}
-              stroke="currentColor" strokeWidth="1.8"
-              strokeLinecap="round" strokeLinejoin="round"
-            />
-          </svg>
-        </button>
 
-        {open && (
-          <ul className="payment-dropdown" role="listbox">
-            {METHODS.map(method => (
-              <li
-                key={method.id}
-                className={`payment-option${selected?.id === method.id ? ' is-active' : ''}`}
-                role="option"
-                aria-selected={selected?.id === method.id}
-                onClick={() => pick(method)}
-              >
-                <span className="pmb-icon"><method.Icon /></span>
-                <span className="pdo-name">{method.name}</span>
-                {selected?.id === method.id && (
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ color: method.accent }}>
-                    <path d="M2.5 7l3.5 3.5 5.5-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+          {cashAppHandle && (
+            <button
+              className="payment-direct-btn"
+              style={{ '--btn-accent': '#00C244' }}
+              onClick={openCashApp}
+              aria-label={`Pay $${amount} via Cash App to $${cashAppHandle}`}
+            >
+              <span className="pdb-icon"><CashAppIcon /></span>
+              <span className="pdb-text">Pay ${amount} via Cash App</span>
+              <ArrowIcon />
+            </button>
+          )}
 
-      {/* Pay button */}
-      {selected && (
-        <button
-          className="payment-pay-btn"
-          style={{ '--pay-accent': selected.accent }}
-          onClick={handlePay}
-          aria-label={`Send $${amount} via ${selected.name}`}
-        >
-          <span className="ppb-icon"><selected.Icon /></span>
-          <span className="ppb-text">Send ${amount}</span>
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ opacity: 0.8 }}>
-            <path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </button>
+          {smsPhone && (
+            <button
+              className="payment-direct-btn"
+              style={{ '--btn-accent': '#34C759' }}
+              onClick={() => openSMS(smsPhone)}
+              aria-label="Pay via iMessage or SMS"
+            >
+              <span className="pdb-icon"><MessageIcon /></span>
+              <span className="pdb-text">Pay via iMessage / SMS</span>
+              <ArrowIcon />
+            </button>
+          )}
+
+          {/* Zelle email — no deep link possible, copy to clipboard instead */}
+          {zelleIsEmail && (
+            <button
+              className="payment-direct-btn"
+              style={{ '--btn-accent': '#6D1ED4' }}
+              onClick={copyZelle}
+              aria-label={`Copy Zelle contact ${zelleContact}`}
+            >
+              <span className="pdb-icon"><ZelleIcon /></span>
+              <span className="pdb-text">Copy Zelle contact</span>
+              <span className="pdb-copy-icon" aria-hidden="true">⎘</span>
+            </button>
+          )}
+
+        </div>
+      ) : (
+        <p className="payment-no-methods">
+          Add a Venmo handle, Cash App $cashtag, or phone number above to get direct pay links.
+        </p>
+      )}
+
+      {/* Fallback hint shown after tapping — lets the user manually find the recipient if the app didn't open */}
+      {lastClicked === 'venmo' && (
+        <p className="payment-fallback">
+          If Venmo didn't open, search <strong>@{venmoHandle}</strong> in the app.
+        </p>
+      )}
+      {lastClicked === 'cashapp' && (
+        <p className="payment-fallback">
+          If Cash App didn't open, search <strong>${cashAppHandle}</strong> in the app.
+        </p>
       )}
 
       {toast && <div className="payment-toast" role="status">{toast}</div>}
-
-      {/* After sending, show the handle as text so they can manually search if the deep link failed */}
-      {didSend && selected && (() => {
-        const handle =
-          selected.id === 'venmo'    ? venmoHandle :
-          selected.id === 'cashapp'  ? cashAppHandle :
-          selected.id === 'zelle'    ? zelleContact : null
-        if (!handle) return null
-        const prefix =
-          selected.id === 'venmo'   ? '@' :
-          selected.id === 'cashapp' ? '$' : ''
-        return (
-          <p className="payment-fallback">
-            If it didn't open, search <strong>{prefix}{handle}</strong> in {selected.name}.
-          </p>
-        )
-      })()}
     </div>
   )
 }
