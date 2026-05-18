@@ -23,8 +23,8 @@
   --red:         #EF4444;
   --green:       #22C55E;
 
-  --radius:      0px;
-  --radius-sm:   0px;
+  --radius:      16px;
+  --radius-sm:   10px;
   --shadow:      0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.08);
   --shadow-sm:   0 1px 4px rgba(0,0,0,0.08);
 }
