@@ -124,7 +124,7 @@ export default function GasPriceMap({ selectedState, selectedPrice, mapPrices })
       <div className="gas-map-header">
         <div>
           <h2 className="gas-map-title">Gas Prices by State</h2>
-          <p className="gas-map-sub">Weekly averages · Updates every Monday via EIA</p>
+          <p className="gas-map-sub">Daily averages · Source: AAA</p>
         </div>
 
         {selectedState && displayPrice ? (
