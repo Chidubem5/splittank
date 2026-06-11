@@ -34,7 +34,7 @@
 //   ├─ ProfileModal      (car + payment save — shown when showProfile=true)
 //   └─ FriendsPanel      (friends list + driver picker — shown when showFriends=true)
 
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useRef, useMemo, lazy, Suspense } from 'react'
 import { getYears, getMakes, getModels, getOptions, getVehicleMPG } from './api/fuelEconomy'
 import { STATE_GAS_PRICES } from './data/gasPrices'      // offline fallback prices
 import { getTollRate }      from './data/tollRates'        // base toll cost per state
@@ -43,12 +43,13 @@ import { fetchStateGasPrice, fetchAllStatePrices, normalizeCounty, METRO_STATES 
 import { fetchCounties } from './api/counties'             // Census Bureau county list
 import Combobox from './components/Combobox'               // custom typeahead input (replaces <datalist>)
 import RoadHero from './components/RoadHero'               // decorative SVG banner
-import GasPriceMap from './components/GasPriceMap'         // interactive USA gas price heat map
 import RoadGallery from './components/RoadGallery'         // three illustrated panels
 import PaymentButtons from './components/PaymentButtons'   // Venmo/CashApp/Zelle/Apple Pay buttons
-import AuthModal from './components/AuthModal'             // Google/Facebook/Apple sign-in modal
-import ProfileModal from './components/ProfileModal'       // save car + payment handles
-import FriendsPanel from './components/FriendsPanel'       // manage friends + select driver
+// Lazily loaded — pulled in only when the user first opens them
+const GasPriceMap  = lazy(() => import('./components/GasPriceMap'))
+const AuthModal    = lazy(() => import('./components/AuthModal'))
+const ProfileModal = lazy(() => import('./components/ProfileModal'))
+const FriendsPanel = lazy(() => import('./components/FriendsPanel'))
 import { useAuth } from './contexts/AuthContext'           // Firebase auth state + Firestore profile
 import './App.css'
 
@@ -143,6 +144,9 @@ export default function App() {
   const [routeError,   setRouteError]   = useState('')
   const [cityRatio,    setCityRatio]    = useState(null) // 0–1 fraction that is city driving; null = not calculated
   const [showRoute,    setShowRoute]    = useState(false)
+  const [routeSegments,   setRouteSegments]   = useState([])   // [{ state, miles, gasPrice }] — multi-state breakdown
+  const [detectingStates, setDetectingStates] = useState(false)
+  const [tankGallons,     setTankGallons]     = useState('')   // optional tank size for pit-stop calc
 
   // ── County state ──────────────────────────────────────────────────────────
   const [county,         setCounty]         = useState('')   // selected county name
@@ -158,7 +162,7 @@ export default function App() {
 
   // ── Auth + modal state ────────────────────────────────────────────────────
   // useAuth() reads from AuthContext — the sign-in state managed in AuthContext.jsx
-  const { currentUser, userProfile, friends, isEnabled } = useAuth()
+  const { currentUser, userProfile, friends, isEnabled, saveProfile } = useAuth()
   const [showAuth,    setShowAuth]    = useState(false)
   const [showProfile, setShowProfile] = useState(false)
   const [showFriends, setShowFriends] = useState(false)
@@ -175,6 +179,19 @@ export default function App() {
   // Selected friend as driver (pre-fills car + payment handles)
   const [driverFriend, setDriverFriend] = useState(null)
 
+  // ── EV mode ───────────────────────────────────────────────────────────────
+  const [isEV,           setIsEV]           = useState(false)
+  const [electricityRate, setElectricityRate] = useState('0.16') // $/kWh
+  const [milesPerKwh,    setMilesPerKwh]    = useState('')       // mi/kWh
+
+  // ── Custom split percentages (one per passenger) ──────────────────────────
+  const [customShares, setCustomShares] = useState([])
+
+  // ── UI feedback state ─────────────────────────────────────────────────────
+  const [copyLinkToast, setCopyLinkToast] = useState(false)
+  const [tripSaved,     setTripSaved]     = useState(false)
+  const [showTrips,     setShowTrips]     = useState(true)
+
   // ── Side effects ──────────────────────────────────────────────────────────
 
   // Close the header dropdown on outside click.
@@ -185,6 +202,38 @@ export default function App() {
     document.addEventListener('mousedown', handleClick)
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
+
+  // Restore calculator state from URL query params on mount.
+  // Enables shareable links — e.g. splittank.com?m=150&st=Illinois&p=3
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search)
+    if (p.get('m'))  setMiles(p.get('m'))
+    if (p.get('st')) setState(p.get('st'))
+    if (p.get('co')) setCounty(p.get('co'))
+    if (p.get('p'))  setPassengers(Math.max(1, parseInt(p.get('p'), 10) || 1))
+    const sm = p.get('sm')
+    if (sm === 'cover' || sm === 'custom') setSplitMode(sm)
+    if (p.get('rt') === '1') setRoundTrip(true)
+    if (p.get('tl')) setTolls(p.get('tl'))
+    if (p.get('ev') === '1') {
+      setIsEV(true)
+      if (p.get('mpg')) setMilesPerKwh(p.get('mpg'))
+      if (p.get('er'))  setElectricityRate(p.get('er'))
+    } else {
+      if (p.get('gp')) { setGasPrice(p.get('gp')); setCustomGas(true) }
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // When splitMode switches to 'custom' or passengers count changes in custom mode,
+  // resize the customShares array — preserving existing values, filling new slots equally.
+  useEffect(() => {
+    if (splitMode !== 'custom') return
+    setCustomShares(prev => {
+      if (prev.length === passengers) return prev
+      const share = parseFloat((100 / passengers).toFixed(1))
+      return Array.from({ length: passengers }, (_, i) => prev[i] ?? share)
+    })
+  }, [passengers, splitMode])
 
   // Pre-fill car and payment info from a friend's saved profile.
   function applyDriverFriend(friend) {
@@ -214,6 +263,88 @@ export default function App() {
     setZelleContacts(['']); setAppleContacts([''])
   }
 
+  // ── Share + trip history helpers ──────────────────────────────────────────
+
+  // Build a URL that encodes all current calculator inputs as query params.
+  function buildShareURL() {
+    const p = new URLSearchParams()
+    if (miles) p.set('m', miles)
+    if (state) p.set('st', state)
+    if (county) p.set('co', county)
+    if (isEV) {
+      p.set('ev', '1')
+      if (milesPerKwh) p.set('mpg', milesPerKwh)
+      if (electricityRate !== '0.16') p.set('er', electricityRate)
+    } else if (customGas && gasPrice) {
+      p.set('gp', gasPrice)
+    }
+    if (passengers !== 1) p.set('p', String(passengers))
+    if (splitMode !== 'even') p.set('sm', splitMode)
+    if (roundTrip) p.set('rt', '1')
+    if (tolls) p.set('tl', tolls)
+    const str = p.toString()
+    return str
+      ? `${window.location.origin}${window.location.pathname}?${str}`
+      : `${window.location.origin}${window.location.pathname}`
+  }
+
+  async function copyLink() {
+    try { await navigator.clipboard.writeText(buildShareURL()) } catch { /* ignore */ }
+    setCopyLinkToast(true)
+    setTimeout(() => setCopyLinkToast(false), 3000)
+  }
+
+  function shareResult() {
+    if (!liveResult) return
+    navigator.share({
+      title: 'Split Tank',
+      text: `Gas split: each person owes $${liveResult.perPerson.toFixed(2)} for a ${Math.round(liveResult.miles)}-mile trip`,
+      url: buildShareURL(),
+    }).catch(() => {})
+  }
+
+  // Save the current result to the signed-in user's trip history (max 5 trips).
+  async function saveCurrentTrip() {
+    if (!currentUser || !liveResult) return
+    const trip = {
+      id: Date.now(),
+      ts: Date.now(),
+      miles: parseFloat(miles),
+      state: state || '',
+      gasPrice: liveResult.gp,
+      passengers,
+      splitMode,
+      totalCost: liveResult.totalCost,
+      perPerson: liveResult.perPerson,
+      mpg: liveResult.mpg,
+      roundTrip,
+      isEV,
+    }
+    const existing = userProfile?.trips ?? []
+    await saveProfile({ trips: [trip, ...existing].slice(0, 5) })
+    setTripSaved(true)
+    setTimeout(() => setTripSaved(false), 3000)
+  }
+
+  // Restore calculator inputs from a saved trip.
+  function loadTrip(trip) {
+    setMiles(String(trip.miles))
+    if (trip.state) setState(trip.state)
+    setPassengers(trip.passengers)
+    setSplitMode(trip.splitMode)
+    setRoundTrip(trip.roundTrip ?? false)
+    if (trip.isEV) {
+      setIsEV(true)
+      setMilesPerKwh(String(trip.mpg))
+      setElectricityRate(String(trip.gasPrice))
+    } else {
+      setIsEV(false)
+      setGasPrice(String(trip.gasPrice))
+      setCustomGas(true)
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
   // ── Contact array helpers ─────────────────────────────────────────────────
   function addContact(setter)         { setter(prev => [...prev, '']) }
   function removeContact(setter, idx) { setter(prev => prev.filter((_, i) => i !== idx)) }
@@ -228,7 +359,7 @@ export default function App() {
     const venmo    = venmoHandles.find(h => h.trim())
     const cashApp  = cashAppHandles.find(h => h.trim())
     const amount   = result.perPerson.toFixed(2)
-    const tripInfo = `${Math.round(result.miles)}-mile trip, ${result.mpg} mpg`
+    const tripInfo = `${Math.round(result.miles)}-mile trip, ${result.mpg} ${result.isEV ? 'mi/kWh' : 'mpg'}`
     let msg
     if (venmo) {
       msg = `Hey! Your gas share for our ${tripInfo} is $${amount}. Tap to pay on Venmo: https://venmo.com/u/${venmo}?txn=pay&amount=${amount}&note=Split%20Tank — or search @${venmo} in the Venmo app.`
@@ -329,11 +460,82 @@ out body;`,
     return events.length > 0 ? parseFloat((events.length * ratePerEvent).toFixed(2)) : 0
   }
 
+  // Sample points along the OSRM route, reverse-geocode each to a US state, fetch
+  // per-state live gas prices, and return weighted-average price across the whole route.
+  async function detectRouteStates(coords, totalMiles) {
+    if (!coords?.length || coords.length < 2) return null
+
+    // Sample up to 14 evenly-spaced coordinate pairs from the dense geometry array.
+    const N    = Math.min(14, coords.length)
+    const step = (coords.length - 1) / (N - 1)
+    const samples = Array.from({ length: N }, (_, i) =>
+      coords[Math.min(Math.round(i * step), coords.length - 1)]
+    )
+
+    // zoom=5 = state-level reverse geocode — cheap and fast.
+    // Parallel fetch is intentional: this is a single user-triggered action, not a loop.
+    const stateNames = await Promise.all(
+      samples.map(([lon, lat]) =>
+        fetch(
+          `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&zoom=5`,
+          { headers: { 'Accept-Language': 'en' } }
+        )
+          .then(r => r.json())
+          .then(d => d?.address?.state ?? null)
+          .catch(() => null)
+      )
+    )
+
+    // Collapse consecutive same-state runs into segments with a sample count.
+    const rawSegs = []
+    let cur = stateNames[0], start = 0
+    for (let i = 1; i < stateNames.length; i++) {
+      if (stateNames[i] && stateNames[i] !== cur) {
+        rawSegs.push({ state: cur, count: i - start })
+        cur = stateNames[i]; start = i
+      }
+    }
+    rawSegs.push({ state: cur, count: stateNames.length - start })
+
+    // Keep only segments whose state name exists in our gas-price lookup.
+    const valid = rawSegs.filter(s => s.state && STATE_GAS_PRICES[s.state])
+    if (!valid.length) return null
+
+    // Apportion total miles proportionally across recognised segments.
+    const totalCount = valid.reduce((s, x) => s + x.count, 0)
+    const withMiles  = valid.map(s => ({
+      state: s.state,
+      miles: Math.round(totalMiles * s.count / totalCount),
+    }))
+
+    // Fetch live gas prices for every unique state in parallel.
+    const uniqueStates = [...new Set(withMiles.map(s => s.state))]
+    const priceMap = {}
+    await Promise.all(uniqueStates.map(async st => {
+      const r = await fetchStateGasPrice(st).catch(() => null)
+      priceMap[st] = r?.price ?? STATE_GAS_PRICES[st] ?? null
+    }))
+
+    const segments = withMiles.map(s => ({
+      state:    s.state,
+      miles:    s.miles,
+      gasPrice: priceMap[s.state],
+    }))
+
+    // Weighted-average price weighted by miles fraction in each state.
+    const weightedPrice = segments.reduce(
+      (sum, s) => sum + (s.gasPrice ?? 0) * (s.miles / totalMiles), 0
+    )
+
+    return { segments, weightedPrice: parseFloat(weightedPrice.toFixed(3)) }
+  }
+
   async function fetchRoute() {
     if (!tripFrom.trim() || !tripTo.trim()) return
     setRouteLoading(true)
     setRouteError('')
     setCityRatio(null)
+    setRouteSegments([])
     try {
       const [from, to] = await Promise.all([geocode(tripFrom), geocode(tripTo)])
       if (!from || !to) {
@@ -353,7 +555,25 @@ out body;`,
         return
       }
       const route = routeData.routes[0]
-      setMiles((route.distance / 1609.34).toFixed(1))
+      const totalMiles = route.distance / 1609.34
+      setMiles(totalMiles.toFixed(1))
+
+      // Detect state boundaries along the route in the background so the UI
+      // isn't blocked — state breakdown + weighted gas price appear once ready.
+      setDetectingStates(true)
+      detectRouteStates(route.geometry?.coordinates, totalMiles).then(result => {
+        setDetectingStates(false)
+        if (!result) return
+        setRouteSegments(result.segments)
+        if (result.segments.length > 1) {
+          // Multi-state: auto-fill starting state + weighted-average gas price.
+          if (result.segments[0]?.state) setState(result.segments[0].state)
+          setGasPrice(result.weightedPrice.toFixed(2))
+          setCustomGas(true)
+        } else if (result.segments[0]?.state) {
+          setState(result.segments[0].state)
+        }
+      }).catch(() => setDetectingStates(false))
 
       // City/highway split from per-segment speed annotations.
       let hwyMeters = 0, totalMeters = 0
@@ -569,11 +789,12 @@ out body;`,
       .finally(() => setLoadingMpg(false))
   }, [optionId])
 
-  // Fetch the live gas price whenever state or county changes.
-  // Only runs if the user hasn't manually overridden the price (customGas flag).
-  // Falls back to the static STATE_GAS_PRICES table if the API returns nothing.
+  // Fetch the live gas price whenever state, county, or EV-mode changes.
+  // Skipped when the user has manually overridden the price OR when in EV mode
+  // (electricity rate is entered manually). Including isEV in deps means toggling
+  // EV off automatically re-fetches the state gas price.
   useEffect(() => {
-    if (!state || customGas) return
+    if (!state || customGas || isEV) return // eslint-disable-line react-hooks/exhaustive-deps
     setLivePriceDate(null)
     setLivePriceLabel(null)
     setLivePriceSource(null)
@@ -587,7 +808,7 @@ out body;`,
         setGasPrice(STATE_GAS_PRICES[state]?.toFixed(2) ?? '')
       }
     })
-  }, [state, county])
+  }, [state, county, isEV]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch live prices for all 50 states once on mount so the heat map
   // shows EIA weekly data instead of the static fallback prices.
@@ -603,34 +824,62 @@ out body;`,
   }
 
   const liveResult = (() => {
-    const m  = parseFloat(miles)
-    const gp = parseFloat(gasPrice)
-    if (!m || !gp) return null
-
+    const m = parseFloat(miles)
+    if (!m) return null
     const effectiveMiles = roundTrip ? m * 2 : m
 
-    let gallons, mpg
+    let gallons, mpg, gasCost, effectiveGp
 
-    if (cityRatio !== null && mpgData?.city && mpgData?.highway && !showManual) {
-      // City/highway split from route calculation
-      const cityM = effectiveMiles * cityRatio
-      const hwyM  = effectiveMiles * (1 - cityRatio)
-      gallons = cityM / mpgData.city + hwyM / mpgData.highway
-      mpg = parseFloat((effectiveMiles / gallons).toFixed(1))
+    if (isEV) {
+      const eff  = parseFloat(milesPerKwh)
+      const rate = parseFloat(electricityRate)
+      if (!eff || !rate) return null
+      gallons    = effectiveMiles / eff   // gallons = kWh in EV context
+      mpg        = eff
+      gasCost    = gallons * rate
+      effectiveGp = rate
     } else {
-      mpg = activeMpg()
-      if (!mpg) return null
-      gallons = effectiveMiles / mpg
+      const gp = parseFloat(gasPrice)
+      if (!gp) return null
+      effectiveGp = gp
+
+      if (cityRatio !== null && mpgData?.city && mpgData?.highway && !showManual) {
+        const cityM = effectiveMiles * cityRatio
+        const hwyM  = effectiveMiles * (1 - cityRatio)
+        gallons = cityM / mpgData.city + hwyM / mpgData.highway
+        mpg     = parseFloat((effectiveMiles / gallons).toFixed(1))
+      } else {
+        mpg = activeMpg()
+        if (!mpg) return null
+        gallons = effectiveMiles / mpg
+      }
+      gasCost = gallons * gp
     }
 
     const tollAmount = (parseFloat(tolls) || 0) * (roundTrip ? 2 : 1)
-    const gasCost   = gallons * gp
-    const totalCost = gasCost + tollAmount
-    const perPerson = splitMode === 'even'
-      ? totalCost / (passengers + 1)
-      : totalCost / passengers
+    const totalCost  = gasCost + tollAmount
 
-    return { gallons, gasCost, tollAmount, totalCost, perPerson, passengers, splitMode, miles: effectiveMiles, mpg, gp, cityRatio, roundTrip }
+    // ── Split calculations ────────────────────────────────────────────────
+    let perPerson, customAmounts, driverPct, driverAmount, totalSharePct
+    if (splitMode === 'custom' && customShares.length > 0) {
+      const shares    = customShares.slice(0, passengers).map(s => parseFloat(s) || 0)
+      totalSharePct   = shares.reduce((a, b) => a + b, 0)
+      customAmounts   = shares.map(s => totalCost * (s / 100))
+      driverPct       = Math.max(0, 100 - totalSharePct)
+      driverAmount    = totalCost * (driverPct / 100)
+      perPerson       = customAmounts[0] ?? 0
+    } else {
+      perPerson = splitMode === 'even'
+        ? totalCost / (passengers + 1)
+        : totalCost / passengers
+    }
+
+    return {
+      gallons, gasCost, tollAmount, totalCost, perPerson,
+      passengers, splitMode, miles: effectiveMiles, mpg, gp: effectiveGp,
+      cityRatio, roundTrip, isEV,
+      ...(splitMode === 'custom' ? { customAmounts, driverPct, driverAmount, totalSharePct } : {}),
+    }
   })()
 
   // Scroll the result card into view the first time a result appears.
@@ -729,6 +978,38 @@ out body;`,
           </section>
         )}
 
+        {/* ── RECENT TRIPS (signed-in users only) ────────────────────────────── */}
+        {isEnabled && currentUser && userProfile?.trips?.length > 0 && (
+          <section className="card recent-trips-card">
+            <div className="section-header">
+              <span className="section-title">Recent Trips</span>
+              <button className="toggle-link" onClick={() => setShowTrips(t => !t)}>
+                {showTrips ? 'hide' : 'show'}
+              </button>
+            </div>
+            {showTrips && (
+              <div className="trip-history-list">
+                {userProfile.trips.map(trip => (
+                  <button key={trip.id} className="trip-history-item" onClick={() => loadTrip(trip)}>
+                    <div className="trip-history-main">
+                      <span className="trip-history-route">
+                        {trip.miles} mi{trip.roundTrip ? ' (RT)' : ''}{trip.state ? ` · ${trip.state}` : ''}
+                      </span>
+                      <span className="trip-history-amount">${trip.perPerson.toFixed(2)}/person</span>
+                    </div>
+                    <div className="trip-history-meta">
+                      {trip.isEV ? `${trip.mpg} mi/kWh` : `${trip.mpg} mpg`} · {trip.passengers}p · {trip.splitMode === 'even' ? 'even' : trip.splitMode === 'cover' ? 'cover' : 'custom'}
+                      <span className="trip-history-date">
+                        {new Date(trip.ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      </span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
         {/* ── TRIP DETAILS ──────────────────────────────────────────────────── */}
         <section className="card">
           <div className="section-header">
@@ -741,6 +1022,22 @@ out body;`,
               />
               Round trip
             </label>
+          </div>
+
+          {/* Fuel type toggle — Gas vs Electric */}
+          <div className="fuel-toggle-row">
+            <button
+              className={`fuel-toggle-btn${!isEV ? ' active' : ''}`}
+              onClick={() => setIsEV(false)}
+            >
+              ⛽ Gas
+            </button>
+            <button
+              className={`fuel-toggle-btn${isEV ? ' active' : ''}`}
+              onClick={() => setIsEV(true)}
+            >
+              ⚡ Electric
+            </button>
           </div>
 
           {/* Route calculator — geocodes two addresses and auto-fills miles */}
@@ -762,13 +1059,13 @@ out body;`,
                   type="text"
                   placeholder="From — e.g. 123 Main St, Boston MA"
                   value={tripFrom}
-                  onChange={e => { setTripFrom(e.target.value); setCityRatio(null) }}
+                  onChange={e => { setTripFrom(e.target.value); setCityRatio(null); setRouteSegments([]) }}
                 />
                 <input
                   type="text"
                   placeholder="To — e.g. 456 Oak Ave, Providence RI"
                   value={tripTo}
-                  onChange={e => { setTripTo(e.target.value); setCityRatio(null) }}
+                  onChange={e => { setTripTo(e.target.value); setCityRatio(null); setRouteSegments([]) }}
                 />
                 <button
                   type="button"
@@ -785,6 +1082,60 @@ out body;`,
                     {mpgData?.city && mpgData?.highway && !showManual && ' — using split MPG for accuracy'}
                   </p>
                 )}
+
+                {/* Multi-state breakdown — shown once detectRouteStates finishes */}
+                {detectingStates && (
+                  <p className="route-states-loading">Detecting states along route…</p>
+                )}
+                {routeSegments.length > 1 && (() => {
+                  // Pit-stop recommendations: fill up when range won't cover the next
+                  // segment, or when the next state's price is >5% more expensive.
+                  const mpg  = (showManual && manualMpg) ? parseFloat(manualMpg) : (mpgData?.[mpgType] ?? null)
+                  const tank = parseFloat(tankGallons)
+                  const range = (mpg && tank && tank > 0) ? mpg * tank : null
+                  const pitStopIdx = new Set()
+                  if (range) {
+                    let milesSinceFill = 0
+                    for (let i = 0; i < routeSegments.length - 1; i++) {
+                      milesSinceFill += routeSegments[i].miles
+                      const remaining  = range - milesSinceFill
+                      const nextMiles  = routeSegments[i + 1].miles
+                      const cantMakeIt = remaining < nextMiles + 30
+                      const nextPricier = routeSegments[i + 1]?.gasPrice && routeSegments[i]?.gasPrice &&
+                                          routeSegments[i + 1].gasPrice > routeSegments[i].gasPrice * 1.05
+                      if (cantMakeIt || nextPricier) {
+                        pitStopIdx.add(i)
+                        milesSinceFill = 0
+                      }
+                    }
+                  }
+
+                  const totalMilesCalc = parseFloat(miles) || 1
+                  const weightedAvg = routeSegments.reduce(
+                    (s, seg) => s + (seg.gasPrice ?? 0) * (seg.miles / totalMilesCalc), 0
+                  )
+
+                  return (
+                    <div className="route-states">
+                      <div className="route-states-header">
+                        <span>Route passes through {routeSegments.length} states</span>
+                        <span>Weighted avg ${weightedAvg.toFixed(2)}/gal</span>
+                      </div>
+                      {routeSegments.map((seg, i) => (
+                        <div className="route-state-row" key={i}>
+                          <span className="route-state-name">{seg.state}</span>
+                          <span className="route-state-miles">{Math.round(seg.miles)} mi</span>
+                          <span className="route-state-price">
+                            ${seg.gasPrice?.toFixed(2) ?? '—'}/gal
+                          </span>
+                          {pitStopIdx.has(i) && (
+                            <span className="pit-stop-tag">⛽ Fill up here</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )
+                })()}
               </div>
             )}
           </div>
@@ -800,6 +1151,24 @@ out body;`,
               min="0"
             />
           </div>
+
+          {/* Tank size — only shown on multi-state gas trips to unlock pit-stop tips */}
+          {routeSegments.length > 1 && !isEV && (
+            <div className="field">
+              <label>
+                Tank size (gal)
+                <span className="badge badge-optional">optional — shows refuel tips</span>
+              </label>
+              <input
+                type="number"
+                placeholder="e.g. 13.2"
+                value={tankGallons}
+                onChange={e => setTankGallons(e.target.value)}
+                min="1"
+                step="0.5"
+              />
+            </div>
+          )}
 
           {/* Location detection */}
           <div className="field">
@@ -887,68 +1256,100 @@ out body;`,
             </div>
           )}
 
-          {/* Gas price input with live/static badge */}
-          <div className="field">
-            <label>
-              Gas price ($/gal)
-              {/* Badge shows whether we have live EIA data or are using a state average */}
-              {state && !customGas && (
-                <span className="badge">
-                  {livePriceDate
-                    ? `${livePriceSource === 'AAA' ? 'AAA' : 'EIA'} · ${livePriceDate}${livePriceLabel ? ` · ${livePriceLabel}` : ''}`
-                    : 'State avg'}
-                </span>
-              )}
-            </label>
-
-            {/* Hint shown when county is set but no metro-level data is available */}
-            {(county || detectedLocation?.county) && !customGas && !livePriceLabel && (
-              <p className="county-note">
-                📍 {county || detectedLocation.county} — using {state} weekly average.
-                Tap the price to enter your local pump price.
-              </p>
-            )}
-
-            <div className="gas-price-row">
+          {/* Gas price / electricity rate — switches label and behaviour in EV mode */}
+          {isEV ? (
+            <div className="field">
+              <label>Electricity rate ($/kWh)</label>
               <input
                 type="number"
                 step="0.01"
-                placeholder="e.g. 3.45"
-                value={gasPrice}
-                // Setting customGas to true locks in the user's manual price
-                // and prevents the auto-fill effect from overwriting it
-                onChange={e => { setGasPrice(e.target.value); setCustomGas(true) }}
+                placeholder="e.g. 0.16"
+                value={electricityRate}
+                onChange={e => setElectricityRate(e.target.value)}
                 min="0"
               />
-              {/* "Reset to avg" button only appears after the user has customized the price */}
-              {customGas && state && (
-                <button className="reset-btn" onClick={() => {
-                  setCustomGas(false)
-                  setLivePriceDate(null)
-                  setLivePriceLabel(null)
-                  setLivePriceSource(null)
-                  fetchStateGasPrice(state, county || null).then(result => {
-                    if (result) {
-                      setGasPrice(result.price.toFixed(2))
-                      setLivePriceDate(formatEIADate(result.period))
-                      setLivePriceLabel(result.label ?? null)
-                      setLivePriceSource(result.source ?? null)
-                    } else {
-                      setGasPrice(STATE_GAS_PRICES[state]?.toFixed(2) ?? '')
-                    }
-                  })
-                }}>
-                  Reset to avg
-                </button>
-              )}
+              <p className="county-note">National avg ~$0.16/kWh · check your utility bill for your exact rate</p>
             </div>
-          </div>
+          ) : (
+            <div className="field">
+              <label>
+                Gas price ($/gal)
+                {/* Badge: route weighted avg (multi-state), live EIA/AAA, or state avg */}
+                {routeSegments.length > 1 && customGas ? (
+                  <span className="badge badge-route">Route weighted avg</span>
+                ) : state && !customGas ? (
+                  <span className="badge">
+                    {livePriceDate
+                      ? `${livePriceSource === 'AAA' ? 'AAA' : 'EIA'} · ${livePriceDate}${livePriceLabel ? ` · ${livePriceLabel}` : ''}`
+                      : 'State avg'}
+                  </span>
+                ) : null}
+              </label>
+
+              {(county || detectedLocation?.county) && !customGas && !livePriceLabel && (
+                <p className="county-note">
+                  📍 {county || detectedLocation.county} — using {state} weekly average.
+                  Tap the price to enter your local pump price.
+                </p>
+              )}
+
+              <div className="gas-price-row">
+                <input
+                  type="number"
+                  step="0.01"
+                  placeholder="e.g. 3.45"
+                  value={gasPrice}
+                  onChange={e => { setGasPrice(e.target.value); setCustomGas(true) }}
+                  min="0"
+                />
+                {customGas && state && (
+                  <button className="reset-btn" onClick={() => {
+                    setCustomGas(false)
+                    setLivePriceDate(null)
+                    setLivePriceLabel(null)
+                    setLivePriceSource(null)
+                    fetchStateGasPrice(state, county || null).then(result => {
+                      if (result) {
+                        setGasPrice(result.price.toFixed(2))
+                        setLivePriceDate(formatEIADate(result.period))
+                        setLivePriceLabel(result.label ?? null)
+                        setLivePriceSource(result.source ?? null)
+                      } else {
+                        setGasPrice(STATE_GAS_PRICES[state]?.toFixed(2) ?? '')
+                      }
+                    })
+                  }}>
+                    Reset to avg
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
         </section>
 
         {/* ── THE CAR ───────────────────────────────────────────────────────── */}
         <section className="card">
-          <span className="section-title">The Car (Mileage)</span>
+          <span className="section-title">{isEV ? 'The Vehicle (Efficiency)' : 'The Car (Mileage)'}</span>
 
+          {/* EV mode: simple efficiency input, no API lookup needed */}
+          {isEV ? (
+            <div className="field">
+              <label>Efficiency (mi/kWh)</label>
+              <div className="manual-mpg-row">
+                <input
+                  type="number"
+                  placeholder="e.g. 4.0"
+                  value={milesPerKwh}
+                  onChange={e => setMilesPerKwh(e.target.value)}
+                  min="0.1"
+                  step="0.1"
+                />
+                <span>mi/kWh</span>
+              </div>
+              <p className="county-note" style={{marginTop: 6}}>Typical: 3–5 mi/kWh · check your car's dashboard or spec sheet</p>
+            </div>
+          ) : (
+            <>
           {/* If a friend is pre-selected as driver, show their car as a summary */}
           {driverFriend?.car && (
             <div className="friend-car-badge">
@@ -1068,6 +1469,8 @@ out body;`,
               </>
             )}
           </div>
+            </>
+          )}
         </section>
 
         {/* ── TOLLS ────────────────────────────────────────────────────────── */}
@@ -1145,19 +1548,74 @@ out body;`,
                   <p>Passengers split the full gas cost between themselves</p>
                 </div>
               </label>
+              <label className={`split-option${splitMode === 'custom' ? ' selected' : ''}`}>
+                <input
+                  type="radio"
+                  name="split"
+                  checked={splitMode === 'custom'}
+                  onChange={() => setSplitMode('custom')}
+                />
+                <div className="split-option-text">
+                  <strong>Custom percentages</strong>
+                  <p>Each passenger pays a different share — set the % below</p>
+                </div>
+              </label>
             </div>
           </div>
+
+          {/* Custom share percentage inputs — shown only in custom mode */}
+          {splitMode === 'custom' && (
+            <div className="custom-shares-section">
+              {Array.from({ length: passengers }).map((_, i) => (
+                <div key={i} className="custom-share-row">
+                  <span className="custom-share-label">Passenger {i + 1}</span>
+                  <div className="custom-share-input-row">
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="1"
+                      value={customShares[i] ?? ''}
+                      onChange={e => {
+                        const updated = [...customShares]
+                        updated[i] = e.target.value
+                        setCustomShares(updated)
+                      }}
+                    />
+                    <span>%</span>
+                  </div>
+                  {liveResult?.customAmounts && (
+                    <span className="custom-share-amount">
+                      ${(liveResult.customAmounts[i] ?? 0).toFixed(2)}
+                    </span>
+                  )}
+                </div>
+              ))}
+              {(() => {
+                const total = customShares.slice(0, passengers).reduce((a, b) => a + (parseFloat(b) || 0), 0)
+                const driver = Math.max(0, 100 - total).toFixed(1)
+                return (
+                  <p className="custom-shares-summary">
+                    Passengers: {total.toFixed(1)}% · Driver pays: {driver}%
+                    {Math.abs(total - 100) > 0.1 && total > 100 && (
+                      <span className="custom-shares-warning"> — over 100%</span>
+                    )}
+                  </p>
+                )
+              })()}
+            </div>
+          )}
 
           {/* Show results if all inputs are filled, otherwise show placeholder */}
           {liveResult ? (
             <>
               <div className="result-stats">
                 <div className="stat">
-                  <span className="stat-label">Gas used</span>
-                  <span className="stat-value">{liveResult.gallons.toFixed(2)} gal</span>
+                  <span className="stat-label">{liveResult.isEV ? 'kWh used' : 'Gas used'}</span>
+                  <span className="stat-value">{liveResult.gallons.toFixed(2)} {liveResult.isEV ? 'kWh' : 'gal'}</span>
                 </div>
                 <div className="stat">
-                  <span className="stat-label">{liveResult.tollAmount > 0 ? 'Gas cost' : 'Total gas cost'}</span>
+                  <span className="stat-label">{liveResult.tollAmount > 0 ? (liveResult.isEV ? 'Elec. cost' : 'Gas cost') : (liveResult.isEV ? 'Elec. cost' : 'Total gas cost')}</span>
                   <span className="stat-value">${liveResult.gasCost.toFixed(2)}</span>
                 </div>
                 {liveResult.tollAmount > 0 && (
@@ -1167,39 +1625,63 @@ out body;`,
                   </div>
                 )}
                 <div className="stat">
-                  <span className="stat-label">MPG used</span>
-                  <span className="stat-value">{liveResult.mpg} mpg</span>
+                  <span className="stat-label">{liveResult.isEV ? 'Efficiency' : 'MPG used'}</span>
+                  <span className="stat-value">{liveResult.mpg} {liveResult.isEV ? 'mi/kWh' : 'mpg'}</span>
                 </div>
                 <div className="stat">
-                  <span className="stat-label">Price per gallon</span>
+                  <span className="stat-label">{liveResult.isEV ? 'Rate/kWh' : 'Price/gal'}</span>
                   <span className="stat-value">${liveResult.gp.toFixed(2)}</span>
                 </div>
               </div>
 
-              {/* Big per-person number — the main result */}
-              <div className="per-person-box">
-                <span className="per-person-label">Each passenger owes</span>
-                <span className="per-person-amount">${liveResult.perPerson.toFixed(2)}</span>
-                <p className="per-person-note">
-                  {liveResult.splitMode === 'even'
-                    ? `${liveResult.passengers + 1} people splitting evenly`
-                    : `${liveResult.passengers} passenger${liveResult.passengers > 1 ? 's' : ''} covering the driver`
-                  }
-                </p>
-              </div>
-
-              {navigator.share && (
-                <button
-                  className="share-btn"
-                  onClick={() => navigator.share({
-                    title: 'Split Tank',
-                    text: `Gas split: each person owes $${liveResult.perPerson.toFixed(2)} for a ${Math.round(liveResult.miles)}-mile trip`,
-                    url: 'https://splittank.com',
-                  }).catch(() => {})}  // .catch ignores the AbortError if user cancels
-                >
-                  📤 Share result
-                </button>
+              {/* Custom split breakdown — shown instead of the single big number */}
+              {liveResult.splitMode === 'custom' && liveResult.customAmounts ? (
+                <div className="custom-split-result">
+                  {liveResult.customAmounts.map((amt, i) => (
+                    <div key={i} className="custom-split-result-row">
+                      <span>Passenger {i + 1} ({customShares[i]}%)</span>
+                      <span className="custom-split-result-amount">${amt.toFixed(2)}</span>
+                    </div>
+                  ))}
+                  {liveResult.driverPct > 0.05 && (
+                    <div className="custom-split-result-row custom-split-result-driver">
+                      <span>Driver ({liveResult.driverPct.toFixed(1)}%)</span>
+                      <span className="custom-split-result-amount">${liveResult.driverAmount.toFixed(2)}</span>
+                    </div>
+                  )}
+                  <div className="custom-split-result-total">
+                    Total: ${liveResult.totalCost.toFixed(2)}
+                  </div>
+                </div>
+              ) : (
+                /* Big per-person number — the main result */
+                <div className="per-person-box">
+                  <span className="per-person-label">Each passenger owes</span>
+                  <span className="per-person-amount">${liveResult.perPerson.toFixed(2)}</span>
+                  <p className="per-person-note">
+                    {liveResult.splitMode === 'even'
+                      ? `${liveResult.passengers + 1} people splitting evenly`
+                      : `${liveResult.passengers} passenger${liveResult.passengers > 1 ? 's' : ''} covering the driver`
+                    }
+                  </p>
+                </div>
               )}
+
+              <div className="result-actions">
+                {navigator.share && (
+                  <button className="share-btn" onClick={shareResult}>
+                    📤 Share
+                  </button>
+                )}
+                <button className="copy-link-btn" onClick={copyLink}>
+                  {copyLinkToast ? '✓ Copied!' : '🔗 Copy link'}
+                </button>
+                {isEnabled && currentUser && (
+                  <button className="save-trip-btn" onClick={saveCurrentTrip}>
+                    {tripSaved ? '✓ Saved' : '💾 Save trip'}
+                  </button>
+                )}
+              </div>
             </>
           ) : (
             <p className="total-placeholder">
@@ -1406,25 +1888,30 @@ out body;`,
           <span>Gas Price Heat Map</span>
           <span className="gas-map-toggle-icon" aria-hidden="true">{showMap ? '▲' : '▼'}</span>
         </button>
-        {showMap && <GasPriceMap selectedState={state} selectedPrice={gasPrice} mapPrices={mapPrices} />}
+        {showMap && (
+          <Suspense fallback={null}>
+            <GasPriceMap selectedState={state} selectedPrice={gasPrice} mapPrices={mapPrices} />
+          </Suspense>
+        )}
       </div>
 
       <RoadGallery />
 
       <footer className="app-footer">
-        Gas prices sourced from AAA (daily) with EIA as fallback.
+        {isEV ? 'Electricity rate entered manually.' : 'Gas prices sourced from AAA (daily) with EIA as fallback.'}
       </footer>
 
-      {/* Modals — each renders as an overlay on top of the page.
-          They're kept at the bottom so they're outside the main layout flow. */}
-      {showAuth    && <AuthModal    onClose={() => setShowAuth(false)} />}
-      {showProfile && <ProfileModal onClose={() => setShowProfile(false)} />}
-      {showFriends && (
-        <FriendsPanel
-          onSelectDriver={applyDriverFriend}
-          onClose={() => setShowFriends(false)}
-        />
-      )}
+      {/* Modals — lazily loaded, each renders as an overlay when triggered. */}
+      <Suspense fallback={null}>
+        {showAuth    && <AuthModal    onClose={() => setShowAuth(false)} />}
+        {showProfile && <ProfileModal onClose={() => setShowProfile(false)} />}
+        {showFriends && (
+          <FriendsPanel
+            onSelectDriver={applyDriverFriend}
+            onClose={() => setShowFriends(false)}
+          />
+        )}
+      </Suspense>
     </div>
   )
 }

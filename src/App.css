@@ -1932,3 +1932,330 @@ input[type="number"]:disabled { opacity: 0.4; cursor: not-allowed; }
   .gas-map-legend-sep  { display: none; }
   .gas-map-gradient    { max-width: 100%; }
 }
+
+/* ═══════════════════════════════════════════
+   FUEL TYPE TOGGLE  (Gas / Electric)
+═══════════════════════════════════════════ */
+.fuel-toggle-row {
+  display: flex;
+  gap: 0;
+  margin-bottom: 16px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.fuel-toggle-btn {
+  flex: 1;
+  padding: 10px 12px;
+  border: none;
+  background: var(--bg);
+  color: var(--text-muted);
+  font-size: 0.88rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.fuel-toggle-btn + .fuel-toggle-btn { border-left: 1.5px solid var(--border); }
+.fuel-toggle-btn.active {
+  background: var(--yellow);
+  color: var(--text);
+}
+
+/* ═══════════════════════════════════════════
+   RECENT TRIPS
+═══════════════════════════════════════════ */
+.recent-trips-card { border-color: var(--blue-dark); border-width: 2px; }
+
+.trip-history-list { display: flex; flex-direction: column; gap: 6px; }
+
+.trip-history-item {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 11px 14px;
+  background: var(--bg);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  text-align: left;
+  cursor: pointer;
+  width: 100%;
+  transition: border-color 0.15s, background 0.15s;
+}
+.trip-history-item:hover {
+  border-color: var(--blue-dark);
+  background: var(--blue-light);
+}
+.trip-history-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.trip-history-route {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--text);
+}
+.trip-history-amount {
+  font-size: 0.92rem;
+  font-weight: 800;
+  color: var(--blue-dark);
+  flex-shrink: 0;
+}
+.trip-history-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.73rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+.trip-history-date {
+  font-size: 0.72rem;
+  color: var(--text-light);
+}
+
+/* ═══════════════════════════════════════════
+   CUSTOM SPLIT INPUTS
+═══════════════════════════════════════════ */
+.custom-shares-section {
+  margin-top: 14px;
+  padding: 14px;
+  background: var(--bg);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.custom-share-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.custom-share-label {
+  flex: 1;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text);
+  min-width: 90px;
+}
+.custom-share-input-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.custom-share-input-row input {
+  width: 72px;
+  padding: 8px 10px;
+  font-size: 0.95rem;
+  text-align: center;
+}
+.custom-share-input-row span {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+.custom-share-amount {
+  font-size: 0.88rem;
+  font-weight: 800;
+  color: var(--blue-dark);
+  min-width: 52px;
+  text-align: right;
+}
+.custom-shares-summary {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+  margin-top: 2px;
+}
+.custom-shares-warning { color: var(--red); font-weight: 700; }
+
+/* ═══════════════════════════════════════════
+   CUSTOM SPLIT RESULT BREAKDOWN
+═══════════════════════════════════════════ */
+.custom-split-result {
+  background: var(--bg);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  margin-bottom: 0;
+}
+.custom-split-result-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 11px 14px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+}
+.custom-split-result-row:last-child { border-bottom: none; }
+.custom-split-result-driver {
+  background: var(--yellow-light);
+  color: var(--text);
+}
+.custom-split-result-amount {
+  font-weight: 800;
+  font-size: 1rem;
+  color: var(--blue-dark);
+}
+.custom-split-result-total {
+  padding: 10px 14px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-align: right;
+  color: var(--text-muted);
+  background: var(--bg);
+  border-top: 1.5px solid var(--border);
+}
+
+/* ═══════════════════════════════════════════
+   RESULT ACTIONS ROW  (Share · Copy link · Save)
+═══════════════════════════════════════════ */
+.result-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+  flex-wrap: wrap;
+}
+.result-actions .share-btn {
+  flex: 1;
+  margin-top: 0;
+  min-width: 80px;
+}
+.copy-link-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 13px 14px;
+  background: var(--bg);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--text);
+  cursor: pointer;
+  min-width: 80px;
+  transition: border-color 0.15s, background 0.15s;
+}
+.copy-link-btn:hover { border-color: var(--blue-dark); background: var(--blue-light); }
+
+.save-trip-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 13px 14px;
+  background: var(--yellow-light);
+  border: 1.5px solid var(--yellow-dark);
+  border-radius: var(--radius-sm);
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--text);
+  cursor: pointer;
+  min-width: 80px;
+  transition: background 0.15s, border-color 0.15s;
+}
+.save-trip-btn:hover { background: var(--yellow); }
+
+@media (max-width: 600px) {
+  .custom-shares-section { padding: 12px; }
+  .custom-share-input-row input { width: 64px; }
+  .result-actions { flex-direction: column; }
+  .result-actions .share-btn,
+  .copy-link-btn,
+  .save-trip-btn { min-height: 50px; }
+}
+
+/* ═══════════════════════════════════════════
+   MULTI-STATE ROUTE BREAKDOWN
+═══════════════════════════════════════════ */
+.route-states-loading {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin: 8px 0 0;
+}
+
+.route-states {
+  margin-top: 12px;
+  border: 1.5px solid var(--blue-mid);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--blue-light);
+}
+
+.route-states-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: var(--blue-mid);
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: var(--blue-dark);
+  letter-spacing: 0.03em;
+  gap: 8px;
+}
+
+.route-state-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border-top: 1px solid var(--blue-mid);
+  font-size: 0.82rem;
+}
+
+.route-state-name {
+  flex: 1;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.route-state-miles {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  min-width: 52px;
+  text-align: right;
+}
+
+.route-state-price {
+  font-weight: 700;
+  color: var(--text);
+  min-width: 60px;
+  text-align: right;
+}
+
+.pit-stop-tag {
+  display: inline-block;
+  background: var(--yellow);
+  color: var(--text);
+  font-size: 0.67rem;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 20px;
+  white-space: nowrap;
+  letter-spacing: 0.02em;
+}
+
+.badge-optional {
+  background: var(--border);
+  color: var(--text-muted);
+}
+
+.badge-route {
+  background: var(--blue);
+  color: var(--text);
+}
+
+@media (max-width: 480px) {
+  .route-states-header { flex-direction: column; align-items: flex-start; gap: 2px; }
+  .route-state-row { flex-wrap: wrap; }
+  .pit-stop-tag { margin-top: 2px; }
+}
