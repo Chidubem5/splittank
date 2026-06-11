@@ -375,8 +375,8 @@ export default function App() {
 
   // Geocodes a single query string with five levels of fallback.
   // Level 1: exact query → Nominatim → Photon
-  // Level 2: exact query → US Census Bureau (every US street, no key needed)
-  // Level 3: exact query → Mapbox (if VITE_MAPBOX_TOKEN is set)
+  // Level 2: exact query → Mapbox (if VITE_MAPBOX_TOKEN is set)
+  // Level 3: exact query → Census proxy (/api/geocode — server-side, no CORS issues)
   // Level 4: strip house number → Nominatim → Photon
   // Level 5: city + state only → Nominatim → Photon
   async function geocode(query) {
@@ -404,20 +404,7 @@ export default function App() {
       return null
     }
 
-    // US Census TIGER/Line — authoritative for every US street, free, no key.
-    async function tryCensus(q) {
-      try {
-        const res  = await fetch(
-          `https://geocoding.geo.census.gov/geocoder/locations/onelineaddress?address=${encodeURIComponent(q)}&benchmark=Public_AR_Current&format=json`
-        )
-        const data = await res.json()
-        const match = data?.result?.addressMatches?.[0]
-        if (match) return { lat: String(match.coordinates.y), lon: String(match.coordinates.x) }
-      } catch {}
-      return null
-    }
-
-    // Mapbox — excellent global coverage; only runs if VITE_MAPBOX_TOKEN is configured.
+    // Mapbox — excellent coverage, designed for browser use, CORS-safe.
     async function tryMapbox(q) {
       const token = import.meta.env.VITE_MAPBOX_TOKEN
       if (!token) return null
@@ -432,16 +419,28 @@ export default function App() {
       return null
     }
 
+    // Census TIGER/Line via our Vercel proxy — covers every US street.
+    // Called server-side to avoid the Census API's missing CORS headers.
+    async function tryCensus(q) {
+      try {
+        const res  = await fetch(`/api/geocode?address=${encodeURIComponent(q)}`)
+        if (!res.ok) return null
+        const data = await res.json()
+        if (data.lat) return { lat: String(data.lat), lon: String(data.lon) }
+      } catch {}
+      return null
+    }
+
     // Level 1: exact input via OSM
     const r1 = await tryNominatim(query) ?? await tryPhoton(query)
     if (r1) return r1
 
-    // Level 2: exact input via Census (catches new US streets not yet in OSM)
-    const r2 = await tryCensus(query)
+    // Level 2: Mapbox (commercial coverage, handles new streets and ambiguous queries)
+    const r2 = await tryMapbox(query)
     if (r2) return r2
 
-    // Level 3: exact input via Mapbox (global coverage, handles ambiguous queries well)
-    const r3 = await tryMapbox(query)
+    // Level 3: Census proxy (authoritative for every US street)
+    const r3 = await tryCensus(query)
     if (r3) return r3
 
     // Level 4: strip leading house number ("2631 Clapham Ln, City, ST" → "Clapham Ln, City, ST")
