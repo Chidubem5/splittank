@@ -373,26 +373,56 @@ export default function App() {
 
   // ── Route calculator ──────────────────────────────────────────────────────
 
-  // Tries Nominatim first (good for street addresses), then falls back to
-  // Photon (komoot.io) which handles venue names, landmarks, and POIs well.
+  // Geocodes a single query string, trying progressively looser forms if the
+  // exact address isn't in OSM (common for new subdivisions and rural streets).
+  // Level 1: exact query → Nominatim → Photon
+  // Level 2: strip house number ("123 Main St, City" → "Main St, City")
+  // Level 3: city + state only ("City, State")
   async function geocode(query) {
-    try {
-      const res  = await fetch(
-        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1`,
-        { headers: { 'Accept-Language': 'en' } }
-      )
-      const data = await res.json()
-      if (data?.[0]) return { lat: data[0].lat, lon: data[0].lon }
-    } catch {}
+    async function tryNominatim(q) {
+      try {
+        const res  = await fetch(
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1`,
+          { headers: { 'Accept-Language': 'en' } }
+        )
+        const data = await res.json()
+        if (data?.[0]) return { lat: data[0].lat, lon: data[0].lon }
+      } catch {}
+      return null
+    }
 
-    try {
-      const res    = await fetch(
-        `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=1&lang=en`
-      )
-      const data   = await res.json()
-      const coords = data?.features?.[0]?.geometry?.coordinates
-      if (coords) return { lat: String(coords[1]), lon: String(coords[0]) }
-    } catch {}
+    async function tryPhoton(q) {
+      try {
+        const res    = await fetch(
+          `https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=1&lang=en`
+        )
+        const data   = await res.json()
+        const coords = data?.features?.[0]?.geometry?.coordinates
+        if (coords) return { lat: String(coords[1]), lon: String(coords[0]) }
+      } catch {}
+      return null
+    }
+
+    // Level 1: exact input
+    const r1 = await tryNominatim(query) ?? await tryPhoton(query)
+    if (r1) return r1
+
+    // Level 2: strip leading house number ("2631 Clapham Ln, City, ST" → "Clapham Ln, City, ST")
+    const withoutNumber = query.replace(/^\d+\s+/, '')
+    if (withoutNumber !== query) {
+      const r2 = await tryNominatim(withoutNumber) ?? await tryPhoton(withoutNumber)
+      if (r2) return r2
+    }
+
+    // Level 3: city + state only — extract last two comma-separated parts
+    const parts = query.split(',').map(s => s.trim()).filter(Boolean)
+    if (parts.length >= 2) {
+      const cityState = parts.slice(-2).join(', ')
+      if (cityState !== query) {
+        const r3 = await tryNominatim(cityState) ?? await tryPhoton(cityState)
+        if (r3) return r3
+      }
+    }
 
     return null
   }
