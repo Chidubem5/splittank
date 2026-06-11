@@ -20,9 +20,12 @@
 
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import { inject } from '@vercel/analytics'
 import './index.css'                               // global reset + CSS custom properties (--blue, --yellow, etc.)
 import App from './App.jsx'                        // the entire app lives inside this one component
 import { AuthProvider } from './contexts/AuthContext.jsx'
+
+inject()
 
 // createRoot() is React 18's way to mount the app.
 // It attaches to the <div id="root"> in index.html and takes over rendering.
