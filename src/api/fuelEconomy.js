@@ -79,6 +79,38 @@ export async function getOptions(year, make, model) {
 // (the "08" suffix means the current EPA test cycle, introduced in 2008).
 // Number() converts strings like "28" to the number 28.
 // "|| null" turns 0 (which means "no data") into null so the UI knows to hide it.
+// Typical tank sizes (gallons) by EPA vehicle class.
+// Used as a fallback when the user hasn't entered their tank size manually.
+const TANK_BY_CLASS = {
+  'Minicompact Cars':            10,
+  'Subcompact Cars':             12,
+  'Compact Cars':                13,
+  'Midsize Cars':                15,
+  'Large Cars':                  17,
+  'Small Station Wagons':        14,
+  'Midsize Station Wagons':      16,
+  'Small Pickup Trucks 2WD':     18,
+  'Small Pickup Trucks 4WD':     18,
+  'Standard Pickup Trucks 2WD':  22,
+  'Standard Pickup Trucks 4WD':  22,
+  'Small SUV 2WD':               15,
+  'Small SUV 4WD':               15,
+  'Standard SUV 2WD':            20,
+  'Standard SUV 4WD':            20,
+  'Minivan - 2WD':               20,
+  'Minivan - 4WD':               20,
+  'Cargo Vans':                  25,
+  'Passenger Vans':              25,
+}
+
+export function estimateTankSize(vclass) {
+  if (!vclass) return null
+  // Exact match first, then partial match for edge cases
+  if (TANK_BY_CLASS[vclass]) return TANK_BY_CLASS[vclass]
+  const key = Object.keys(TANK_BY_CLASS).find(k => vclass.toLowerCase().includes(k.toLowerCase().split(' ')[0]))
+  return key ? TANK_BY_CLASS[key] : 15  // 15 gal default if class is unrecognised
+}
+
 export async function getVehicleMPG(id) {
   const res = await fetch(`${BASE}/vehicle/${id}`, { headers: HEADERS });
   if (!res.ok) throw new Error('Failed to fetch vehicle');
@@ -87,5 +119,6 @@ export async function getVehicleMPG(id) {
     city:     Number(data.city08)    || null,
     highway:  Number(data.highway08) || null,
     combined: Number(data.comb08)    || null,
+    vclass:   data.VClass            || null,
   };
 }

@@ -2182,6 +2182,13 @@ input[type="number"]:disabled { opacity: 0.4; cursor: not-allowed; }
   margin: 8px 0 0;
 }
 
+.route-states-note {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin: 6px 0 8px;
+  line-height: 1.4;
+}
+
 .route-states {
   margin-top: 12px;
   border: 1.5px solid var(--blue-mid);

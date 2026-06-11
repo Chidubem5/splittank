@@ -35,7 +35,7 @@
 //   └─ FriendsPanel      (friends list + driver picker — shown when showFriends=true)
 
 import { useState, useEffect, useRef, useMemo, lazy, Suspense } from 'react'
-import { getYears, getMakes, getModels, getOptions, getVehicleMPG } from './api/fuelEconomy'
+import { getYears, getMakes, getModels, getOptions, getVehicleMPG, estimateTankSize } from './api/fuelEconomy'
 import { STATE_GAS_PRICES } from './data/gasPrices'      // offline fallback prices
 import { getTollRate }      from './data/tollRates'        // base toll cost per state
 import { fetchTollInflationMultiplier } from './api/tollInflation'  // BLS CPI multiplier
@@ -1157,8 +1157,10 @@ out body;`,
                   // Pit-stop recommendations: fill up when range won't cover the next
                   // segment, or when the next state's price is >5% more expensive.
                   const mpg  = (showManual && manualMpg) ? parseFloat(manualMpg) : (mpgData?.[mpgType] ?? null)
-                  const tank = parseFloat(tankGallons)
-                  const range = (mpg && tank && tank > 0) ? mpg * tank : null
+                  const manualTank = parseFloat(tankGallons)
+                  const tank = manualTank > 0 ? manualTank : (estimateTankSize(mpgData?.vclass) ?? null)
+                  const tankIsEstimate = !(manualTank > 0) && tank != null
+                  const range = (mpg && tank) ? mpg * tank : null
                   const pitStopIdx = new Set()
                   if (range) {
                     let milesSinceFill = 0
@@ -1187,6 +1189,11 @@ out body;`,
                         <span>Route passes through {routeSegments.length} states</span>
                         <span>Weighted avg ${weightedAvg.toFixed(2)}/gal</span>
                       </div>
+                      {tankIsEstimate && range && (
+                        <p className="route-states-note">
+                          ⛽ Refuel tips based on ~{tank} gal estimated tank — enter your actual tank size below for accuracy.
+                        </p>
+                      )}
                       {routeSegments.map((seg, i) => (
                         <div className="route-state-row" key={i}>
                           <span className="route-state-name">{seg.state}</span>
