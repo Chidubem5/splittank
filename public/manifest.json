@@ -1,0 +1,23 @@
+{
+  "name": "Split Tank",
+  "short_name": "Split Tank",
+  "description": "No more gas debates on road trips. Split Tank calculates everyone's exact share — live pump prices, your car's real MPG, tolls auto-estimated, and EV support. Free.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#EEF2F7",
+  "theme_color": "#29B6F6",
+  "icons": [
+    {
+      "src": "/logo-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/logo-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
