@@ -463,10 +463,11 @@ export default function App() {
     return null
   }
 
-  // Queries OpenStreetMap for toll booths and electronic gantries along a route,
-  // clusters nearby points (so a multi-lane plaza counts once), reverse-geocodes
-  // the route midpoint to pick a state-specific per-event rate, and returns an
-  // estimated dollar total.
+  // Estimates toll costs for a route using two methods combined:
+  //  1. Toll nodes  — physical booths/gantries mapped as OSM nodes → per-event rate
+  //  2. Toll ways   — electronically-tolled road segments tagged toll=yes → per-mile rate
+  //     (only queried when the route bbox is ≤ 3° wide, to keep Overpass fast)
+  // Both are inflation-adjusted via BLS CPI.
   async function estimateTolls(routeCoords) {
     if (!routeCoords?.length) return null
     const lats = routeCoords.map(c => c[1])
@@ -474,20 +475,24 @@ export default function App() {
     const s = Math.min(...lats) - 0.05, n = Math.max(...lats) + 0.05
     const w = Math.min(...lons) - 0.05, e = Math.max(...lons) + 0.05
 
-    // Fetch toll infrastructure, route midpoint state, and CPI multiplier in parallel.
+    // For large cross-country routes the bounding box is too big to query toll ways
+    // efficiently — fall back to node-only for those.
+    const shortRoute = (n - s) < 3 && (e - w) < 3
+
     const mid = routeCoords[Math.floor(routeCoords.length / 2)]
     const [overpassRes, geoRes, inflationMultiplier] = await Promise.all([
       fetch('https://overpass-api.de/api/interpreter', {
         method: 'POST',
-        body: `[out:json][timeout:25];
+        body: `[out:json][timeout:30];
 (
   node["barrier"="toll_booth"](${s},${w},${n},${e});
   node["barrier"="toll_gantry"](${s},${w},${n},${e});
   node["highway"="toll_booth"](${s},${w},${n},${e});
   node["toll"="yes"](${s},${w},${n},${e});
   node["barrier"="payment_point"](${s},${w},${n},${e});
+${shortRoute ? `  way["toll"="yes"](${s},${w},${n},${e});` : ''}
 );
-out body;`,
+out geom;`,
       }),
       fetch(
         `https://nominatim.openstreetmap.org/reverse?lat=${mid[1]}&lon=${mid[0]}&format=json`,
@@ -496,34 +501,51 @@ out body;`,
       fetchTollInflationMultiplier(),
     ])
 
-    const overpassData = await overpassRes.json()
-    const all = overpassData.elements || []
-    if (!all.length) return 0
+    const elements = (await overpassRes.json()).elements || []
+    if (!elements.length) return 0
 
-    // State-specific base rate adjusted for current CPI inflation.
-    const geoData  = geoRes ? await geoRes.json().catch(() => null) : null
+    const geoData   = geoRes ? await geoRes.json().catch(() => null) : null
     const stateName = geoData?.address?.state ?? null
     const ratePerEvent = getTollRate(stateName) * inflationMultiplier
 
-    // Keep only toll points within ~1.5km of the actual route path.
-    // overview=full gives dense geometry, but 0.015° gives breathing room for
-    // slight OSM placement offsets vs the OSRM road center line.
-    const NEAR = 0.015
-    const near = all.filter(pt =>
-      routeCoords.some(([lon, lat]) =>
-        Math.abs(pt.lat - lat) < NEAR && Math.abs(pt.lon - lon) < NEAR
-      )
-    )
+    const NEAR = 0.015    // ~1.5 km proximity to route
+    const CLUSTER = 0.002 // ~200 m — nearby booths in same plaza = one event
 
-    // Cluster: nearby booths in the same plaza count as one event.
-    const CLUSTER = 0.002
+    // ── Toll nodes: physical booths ────────────────────────────────────────
+    const nearNodes = elements
+      .filter(el => el.type === 'node')
+      .filter(pt => routeCoords.some(([lon, lat]) =>
+        Math.abs(pt.lat - lat) < NEAR && Math.abs(pt.lon - lon) < NEAR
+      ))
     const events = []
-    for (const pt of near) {
+    for (const pt of nearNodes) {
       if (!events.some(ev => Math.abs(ev.lat - pt.lat) < CLUSTER && Math.abs(ev.lon - pt.lon) < CLUSTER))
         events.push(pt)
     }
+    const nodeCost = events.length * ratePerEvent
 
-    return events.length > 0 ? parseFloat((events.length * ratePerEvent).toFixed(2)) : 0
+    // ── Toll ways: electronically-tolled highway segments ──────────────────
+    // For each way, find its geometry points that sit near the route,
+    // sum the distances between consecutive on-route points → miles of toll road.
+    const PER_MILE_RATE = 0.10 * inflationMultiplier  // ~$0.10/mile US average
+    let wayMiles = 0
+    for (const el of elements.filter(el => el.type === 'way')) {
+      const onRoute = (el.geometry || []).filter(pt =>
+        routeCoords.some(([lon, lat]) =>
+          Math.abs(pt.lat - lat) < NEAR && Math.abs(pt.lon - lon) < NEAR
+        )
+      )
+      if (onRoute.length < 2) continue
+      for (let i = 1; i < onRoute.length; i++) {
+        const dlat = onRoute[i].lat - onRoute[i - 1].lat
+        const dlon = onRoute[i].lon - onRoute[i - 1].lon
+        wayMiles += Math.sqrt(dlat * dlat + dlon * dlon) * 69
+      }
+    }
+    const wayCost = wayMiles * PER_MILE_RATE
+
+    const total = nodeCost + wayCost
+    return total > 0 ? parseFloat(total.toFixed(2)) : 0
   }
 
   // Sample points along the OSRM route, reverse-geocode each to a US state, fetch
