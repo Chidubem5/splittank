@@ -373,11 +373,11 @@ export default function App() {
 
   // ── Route calculator ──────────────────────────────────────────────────────
 
-  // Geocodes a single query string, trying progressively looser forms if the
-  // exact address isn't in OSM (common for new subdivisions and rural streets).
+  // Geocodes a single query string with four levels of fallback.
   // Level 1: exact query → Nominatim → Photon
-  // Level 2: strip house number ("123 Main St, City" → "Main St, City")
-  // Level 3: city + state only ("City, State")
+  // Level 2: exact query → US Census Bureau (covers every US street, including new ones)
+  // Level 3: strip house number → Nominatim → Photon
+  // Level 4: city + state only → Nominatim → Photon
   async function geocode(query) {
     async function tryNominatim(q) {
       try {
@@ -403,24 +403,42 @@ export default function App() {
       return null
     }
 
-    // Level 1: exact input
+    // US Census TIGER/Line data — authoritative for every US street, free, no key needed.
+    // Only tried for addresses that look like US street addresses (contain a digit + letters).
+    async function tryCensus(q) {
+      try {
+        const res  = await fetch(
+          `https://geocoding.geo.census.gov/geocoder/locations/onelineaddress?address=${encodeURIComponent(q)}&benchmark=Public_AR_Current&format=json`
+        )
+        const data = await res.json()
+        const match = data?.result?.addressMatches?.[0]
+        if (match) return { lat: String(match.coordinates.y), lon: String(match.coordinates.x) }
+      } catch {}
+      return null
+    }
+
+    // Level 1: exact input via OSM
     const r1 = await tryNominatim(query) ?? await tryPhoton(query)
     if (r1) return r1
 
-    // Level 2: strip leading house number ("2631 Clapham Ln, City, ST" → "Clapham Ln, City, ST")
+    // Level 2: exact input via Census (catches new US streets not yet in OSM)
+    const r2 = await tryCensus(query)
+    if (r2) return r2
+
+    // Level 3: strip leading house number ("2631 Clapham Ln, City, ST" → "Clapham Ln, City, ST")
     const withoutNumber = query.replace(/^\d+\s+/, '')
     if (withoutNumber !== query) {
-      const r2 = await tryNominatim(withoutNumber) ?? await tryPhoton(withoutNumber)
-      if (r2) return r2
+      const r3 = await tryNominatim(withoutNumber) ?? await tryPhoton(withoutNumber)
+      if (r3) return r3
     }
 
-    // Level 3: city + state only — extract last two comma-separated parts
+    // Level 4: city + state only — extract last two comma-separated parts
     const parts = query.split(',').map(s => s.trim()).filter(Boolean)
     if (parts.length >= 2) {
       const cityState = parts.slice(-2).join(', ')
       if (cityState !== query) {
-        const r3 = await tryNominatim(cityState) ?? await tryPhoton(cityState)
-        if (r3) return r3
+        const r4 = await tryNominatim(cityState) ?? await tryPhoton(cityState)
+        if (r4) return r4
       }
     }
 
