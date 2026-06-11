@@ -715,8 +715,8 @@ out geom;`,
       if (coords?.length) {
         estimateTolls(coords).then(amount => {
           if (amount !== null) {
-            setTolls(amount > 0 ? String(amount) : '')
-            setTollsEstimated(amount > 0)
+            setTolls(String(amount))
+            setTollsEstimated(true)
           }
         }).catch(() => {})
       }
@@ -1645,8 +1645,10 @@ out geom;`,
           <span className="section-title">Tolls</span>
           <p className="payment-info-hint">
             {tollsEstimated
-              ? 'Auto-estimated from your route — edit if you know the exact amount.'
-              : 'Add any toll costs. Enter addresses above to auto-estimate, or check Google Maps.'}
+              ? tolls === '0'
+                ? 'No tolls detected on this route — edit if you know otherwise.'
+                : 'Auto-estimated from your route — edit if you know the exact amount.'
+              : 'Tolls are auto-filled when you enter both addresses above.'}
           </p>
           <div className="field">
             <label>
