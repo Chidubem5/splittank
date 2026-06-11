@@ -1961,6 +1961,23 @@ input[type="number"]:disabled { opacity: 0.4; cursor: not-allowed; }
   color: var(--text);
 }
 
+.ev-specs-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.ev-spec-badge {
+  font-size: 0.8rem;
+  font-weight: 600;
+  background: var(--blue-light);
+  color: var(--blue-dark);
+  border: 1px solid var(--blue-mid);
+  border-radius: 6px;
+  padding: 4px 10px;
+}
+
 /* ═══════════════════════════════════════════
    RECENT TRIPS
 ═══════════════════════════════════════════ */

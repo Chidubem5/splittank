@@ -896,18 +896,26 @@ out geom;`,
       })
   }, [model, models])
 
-  // Trim selected → fetch MPG.
+  // Trim selected → fetch MPG/efficiency data.
+  // For EVs: auto-switches to EV mode and pre-fills mi/kWh from EPA data.
+  // For gas cars: switches back to gas mode if we were in EV mode.
   useEffect(() => {
     if (!optionId) return
     setLoadingMpg(true)
     getVehicleMPG(optionId)
       .then(data => {
         setMpgData(data)
-        if (!data.combined && !data.city && !data.highway) {
-          setCarError('No MPG data for this vehicle. Enter it manually.')
+        if (data.isEV) {
+          setIsEV(true)
+          if (data.combMiPerKwh) setMilesPerKwh(String(data.combMiPerKwh))
+        } else {
+          setIsEV(false)
+          if (!data.combined && !data.city && !data.highway) {
+            setCarError('No MPG data for this vehicle. Enter it manually.')
+          }
         }
       })
-      .catch(() => setCarError('Could not load MPG. Enter it manually.'))
+      .catch(() => setCarError('Could not load vehicle data. Enter values manually.'))
       .finally(() => setLoadingMpg(false))
   }, [optionId])
 
@@ -1443,23 +1451,45 @@ out geom;`,
         <section className="card">
           <span className="section-title">{isEV ? 'The Vehicle (Efficiency)' : 'The Car (Mileage)'}</span>
 
-          {/* EV mode: simple efficiency input, no API lookup needed */}
+          {/* EV mode: efficiency input — auto-filled when an EV is selected from lookup */}
           {isEV ? (
-            <div className="field">
-              <label>Efficiency (mi/kWh)</label>
-              <div className="manual-mpg-row">
-                <input
-                  type="number"
-                  placeholder="e.g. 4.0"
-                  value={milesPerKwh}
-                  onChange={e => setMilesPerKwh(e.target.value)}
-                  min="0.1"
-                  step="0.1"
-                />
-                <span>mi/kWh</span>
+            <>
+              {/* If an EV was selected via lookup, show its name and EPA range */}
+              {mpgData?.isEV && (
+                <div className="ev-specs-row">
+                  {mpgData.epaRange && (
+                    <span className="ev-spec-badge">
+                      📍 EPA range: {mpgData.epaRange} mi
+                    </span>
+                  )}
+                  {mpgData.combMiPerKwh && (
+                    <span className="ev-spec-badge">
+                      ⚡ {mpgData.combMiPerKwh} mi/kWh combined
+                    </span>
+                  )}
+                </div>
+              )}
+              <div className="field">
+                <label>Efficiency (mi/kWh)
+                  {mpgData?.isEV && milesPerKwh && <span className="badge">EPA data</span>}
+                </label>
+                <div className="manual-mpg-row">
+                  <input
+                    type="number"
+                    placeholder="e.g. 4.0"
+                    value={milesPerKwh}
+                    onChange={e => setMilesPerKwh(e.target.value)}
+                    min="0.1"
+                    step="0.1"
+                  />
+                  <span>mi/kWh</span>
+                </div>
+                {!mpgData?.isEV && (
+                  <p className="county-note" style={{marginTop: 6}}>Typical: 3–5 mi/kWh · check your car's dashboard or spec sheet</p>
+                )}
               </div>
-              <p className="county-note" style={{marginTop: 6}}>Typical: 3–5 mi/kWh · check your car's dashboard or spec sheet</p>
-            </div>
+              {/* Still show vehicle lookup so user can search for their EV */}
+            </>
           ) : (
             <>
           {/* If a friend is pre-selected as driver, show their car as a summary */}

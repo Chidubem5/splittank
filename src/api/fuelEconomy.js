@@ -115,10 +115,28 @@ export async function getVehicleMPG(id) {
   const res = await fetch(`${BASE}/vehicle/${id}`, { headers: HEADERS });
   if (!res.ok) throw new Error('Failed to fetch vehicle');
   const data = await res.json();
+
+  const isEV   = data.atvType === 'EV'
+  const isPhev = data.atvType === 'PHEV' || data.atvType === 'Plug-in Hybrid'
+
+  // kWh/100mi → mi/kWh conversion for EV efficiency fields
+  const toMiPerKwh = v => {
+    const n = Number(v)
+    return n > 0 ? parseFloat((100 / n).toFixed(2)) : null
+  }
+
   return {
+    // Gas / MPGe figures (city08/highway08 are MPGe for EVs)
     city:     Number(data.city08)    || null,
     highway:  Number(data.highway08) || null,
     combined: Number(data.comb08)    || null,
     vclass:   data.VClass            || null,
+    isEV,
+    isPhev,
+    // EV-specific: mi/kWh converted from EPA kWh/100mi
+    cityMiPerKwh:    isEV ? toMiPerKwh(data.cityE)    : null,
+    highwayMiPerKwh: isEV ? toMiPerKwh(data.highwayE) : null,
+    combMiPerKwh:    isEV ? toMiPerKwh(data.combE)    : null,
+    epaRange:        isEV ? (Number(data.range) || null) : null,
   };
 }
