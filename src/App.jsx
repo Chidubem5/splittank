@@ -1218,23 +1218,6 @@ out body;`,
             />
           </div>
 
-          {/* Tank size — only shown on multi-state gas trips to unlock pit-stop tips */}
-          {routeSegments.length > 1 && !isEV && (
-            <div className="field">
-              <label>
-                Tank size (gal)
-                <span className="badge badge-optional">optional — shows refuel tips</span>
-              </label>
-              <input
-                type="number"
-                placeholder="e.g. 13.2"
-                value={tankGallons}
-                onChange={e => setTankGallons(e.target.value)}
-                min="1"
-                step="0.5"
-              />
-            </div>
-          )}
 
           {/* Location detection */}
           <div className="field">
@@ -1536,6 +1519,31 @@ out body;`,
             )}
           </div>
             </>
+          )}
+
+          {/* Tank size — shown in car section for all gas trips so users can enter it
+              alongside their MPG. Used for refuel tips on multi-state routes. */}
+          {!isEV && (
+            <div className="field">
+              <label>
+                Tank size (gal)
+                <span className="badge badge-optional">optional</span>
+              </label>
+              <input
+                type="number"
+                placeholder="Check fuel filler door or owner's manual"
+                value={tankGallons}
+                onChange={e => setTankGallons(e.target.value)}
+                min="1"
+                step="0.5"
+              />
+              {routeSegments.length > 1 && tankGallons && (
+                <p className="county-note">Used to recommend the best states to fill up in.</p>
+              )}
+              {routeSegments.length > 1 && !tankGallons && (
+                <p className="county-note">Enter to get refuel tips for your multi-state route.</p>
+              )}
+            </div>
           )}
         </section>
 
