@@ -373,6 +373,28 @@ export default function App() {
 
   // ── Route calculator ──────────────────────────────────────────────────────
 
+  // Encodes a [lon, lat] coordinate array into Google's encoded polyline format.
+  // Samples to ≤100 points so the payload stays small for long routes.
+  function encodePolyline(coords) {
+    const step = Math.max(1, Math.floor(coords.length / 100))
+    const sampled = coords.filter((_, i) => i % step === 0)
+    if (sampled[sampled.length - 1] !== coords[coords.length - 1])
+      sampled.push(coords[coords.length - 1])
+
+    let out = '', prevLat = 0, prevLon = 0
+    for (const [lon, lat] of sampled) {
+      const latE5 = Math.round(lat * 1e5)
+      const lonE5 = Math.round(lon * 1e5)
+      for (let val of [latE5 - prevLat, lonE5 - prevLon]) {
+        val = val < 0 ? ~(val << 1) : val << 1
+        while (val >= 0x20) { out += String.fromCharCode((0x20 | (val & 0x1f)) + 63); val >>= 5 }
+        out += String.fromCharCode(val + 63)
+      }
+      prevLat = latE5; prevLon = lonE5
+    }
+    return out
+  }
+
   // Geocodes a single query string with five levels of fallback.
   // Level 1: exact query → Nominatim → Photon
   // Level 2: exact query → Mapbox (if VITE_MAPBOX_TOKEN is set)
@@ -463,20 +485,32 @@ export default function App() {
     return null
   }
 
-  // Estimates toll costs for a route using two methods combined:
-  //  1. Toll nodes  — physical booths/gantries mapped as OSM nodes → per-event rate
-  //  2. Toll ways   — electronically-tolled road segments tagged toll=yes → per-mile rate
-  //     (only queried when the route bbox is ≤ 3° wide, to keep Overpass fast)
-  // Both are inflation-adjusted via BLS CPI.
+  // Estimates toll costs for a route.
+  // Primary:  TollGuru API — actual cash tolls for the exact roads driven.
+  //           Requires TOLLGURU_KEY in Vercel env vars (server-side only).
+  // Fallback: OSM node + way detection — inflation-adjusted per-event/per-mile rates.
   async function estimateTolls(routeCoords) {
     if (!routeCoords?.length) return null
+
+    // ── Primary: TollGuru (accurate cash tolls for exact roads) ────────────
+    try {
+      const r = await fetch('/api/tolls', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ polyline: encodePolyline(routeCoords) }),
+      })
+      if (r.ok) {
+        const data = await r.json()
+        if (data.toll != null) return data.toll
+      }
+    } catch {}
+
+    // ── Fallback: OSM node + way detection ────────────────────────────────
     const lats = routeCoords.map(c => c[1])
     const lons = routeCoords.map(c => c[0])
     const s = Math.min(...lats) - 0.05, n = Math.max(...lats) + 0.05
     const w = Math.min(...lons) - 0.05, e = Math.max(...lons) + 0.05
 
-    // For large cross-country routes the bounding box is too big to query toll ways
-    // efficiently — fall back to node-only for those.
     const shortRoute = (n - s) < 3 && (e - w) < 3
 
     const mid = routeCoords[Math.floor(routeCoords.length / 2)]
