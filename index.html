@@ -3,7 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="apple-touch-icon" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/logo-192.png" />
+    <link rel="icon" type="image/png" sizes="512x512" href="/logo-512.png" />
+    <link rel="apple-touch-icon" href="/logo-192.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#29B6F6" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -31,6 +33,28 @@
     <meta name="twitter:title" content="Split Tank: Split Gas Costs on Any Road Trip" />
     <meta name="twitter:description" content="No more gas debates. Split Tank calculates everyone's exact share — live pump prices, your car's real MPG, tolls, and EV support. Free and instant." />
     <meta name="twitter:image" content="https://splittank.com/preview-v4.png" />
+
+    <!-- Structured data: tells Google which image is the site logo -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      "name": "Split Tank",
+      "url": "https://splittank.com",
+      "description": "No more gas debates on road trips. Split Tank calculates everyone's exact share — live pump prices, your car's real MPG, tolls auto-estimated, and EV support. Free.",
+      "publisher": {
+        "@type": "Organization",
+        "name": "Split Tank",
+        "url": "https://splittank.com",
+        "logo": {
+          "@type": "ImageObject",
+          "url": "https://splittank.com/logo-512.png",
+          "width": 512,
+          "height": 512
+        }
+      }
+    }
+    </script>
   </head>
   <body>
     <div id="root"></div>
