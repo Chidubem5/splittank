@@ -373,11 +373,12 @@ export default function App() {
 
   // ── Route calculator ──────────────────────────────────────────────────────
 
-  // Geocodes a single query string with four levels of fallback.
+  // Geocodes a single query string with five levels of fallback.
   // Level 1: exact query → Nominatim → Photon
-  // Level 2: exact query → US Census Bureau (covers every US street, including new ones)
-  // Level 3: strip house number → Nominatim → Photon
-  // Level 4: city + state only → Nominatim → Photon
+  // Level 2: exact query → US Census Bureau (every US street, no key needed)
+  // Level 3: exact query → Mapbox (if VITE_MAPBOX_TOKEN is set)
+  // Level 4: strip house number → Nominatim → Photon
+  // Level 5: city + state only → Nominatim → Photon
   async function geocode(query) {
     async function tryNominatim(q) {
       try {
@@ -403,8 +404,7 @@ export default function App() {
       return null
     }
 
-    // US Census TIGER/Line data — authoritative for every US street, free, no key needed.
-    // Only tried for addresses that look like US street addresses (contain a digit + letters).
+    // US Census TIGER/Line — authoritative for every US street, free, no key.
     async function tryCensus(q) {
       try {
         const res  = await fetch(
@@ -417,6 +417,21 @@ export default function App() {
       return null
     }
 
+    // Mapbox — excellent global coverage; only runs if VITE_MAPBOX_TOKEN is configured.
+    async function tryMapbox(q) {
+      const token = import.meta.env.VITE_MAPBOX_TOKEN
+      if (!token) return null
+      try {
+        const res  = await fetch(
+          `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json?access_token=${token}&limit=1&types=address,place`
+        )
+        const data = await res.json()
+        const coords = data?.features?.[0]?.center
+        if (coords) return { lat: String(coords[1]), lon: String(coords[0]) }
+      } catch {}
+      return null
+    }
+
     // Level 1: exact input via OSM
     const r1 = await tryNominatim(query) ?? await tryPhoton(query)
     if (r1) return r1
@@ -425,20 +440,24 @@ export default function App() {
     const r2 = await tryCensus(query)
     if (r2) return r2
 
-    // Level 3: strip leading house number ("2631 Clapham Ln, City, ST" → "Clapham Ln, City, ST")
+    // Level 3: exact input via Mapbox (global coverage, handles ambiguous queries well)
+    const r3 = await tryMapbox(query)
+    if (r3) return r3
+
+    // Level 4: strip leading house number ("2631 Clapham Ln, City, ST" → "Clapham Ln, City, ST")
     const withoutNumber = query.replace(/^\d+\s+/, '')
     if (withoutNumber !== query) {
-      const r3 = await tryNominatim(withoutNumber) ?? await tryPhoton(withoutNumber)
-      if (r3) return r3
+      const r4 = await tryNominatim(withoutNumber) ?? await tryPhoton(withoutNumber)
+      if (r4) return r4
     }
 
-    // Level 4: city + state only — extract last two comma-separated parts
+    // Level 5: city + state only — extract last two comma-separated parts
     const parts = query.split(',').map(s => s.trim()).filter(Boolean)
     if (parts.length >= 2) {
       const cityState = parts.slice(-2).join(', ')
       if (cityState !== query) {
-        const r4 = await tryNominatim(cityState) ?? await tryPhoton(cityState)
-        if (r4) return r4
+        const r5 = await tryNominatim(cityState) ?? await tryPhoton(cityState)
+        if (r5) return r5
       }
     }
 
