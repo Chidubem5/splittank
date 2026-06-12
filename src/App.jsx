@@ -1451,48 +1451,7 @@ out geom;`,
         <section className="card">
           <span className="section-title">{isEV ? 'The Vehicle (Efficiency)' : 'The Car (Mileage)'}</span>
 
-          {/* EV mode: efficiency input — auto-filled when an EV is selected from lookup */}
-          {isEV ? (
-            <>
-              {/* If an EV was selected via lookup, show its name and EPA range */}
-              {mpgData?.isEV && (
-                <div className="ev-specs-row">
-                  {mpgData.epaRange && (
-                    <span className="ev-spec-badge">
-                      📍 EPA range: {mpgData.epaRange} mi
-                    </span>
-                  )}
-                  {mpgData.combMiPerKwh && (
-                    <span className="ev-spec-badge">
-                      ⚡ {mpgData.combMiPerKwh} mi/kWh combined
-                    </span>
-                  )}
-                </div>
-              )}
-              <div className="field">
-                <label>Efficiency (mi/kWh)
-                  {mpgData?.isEV && milesPerKwh && <span className="badge">EPA data</span>}
-                </label>
-                <div className="manual-mpg-row">
-                  <input
-                    type="number"
-                    placeholder="e.g. 4.0"
-                    value={milesPerKwh}
-                    onChange={e => setMilesPerKwh(e.target.value)}
-                    min="0.1"
-                    step="0.1"
-                  />
-                  <span>mi/kWh</span>
-                </div>
-                {!mpgData?.isEV && (
-                  <p className="county-note" style={{marginTop: 6}}>Typical: 3–5 mi/kWh · check your car's dashboard or spec sheet</p>
-                )}
-              </div>
-              {/* Still show vehicle lookup so user can search for their EV */}
-            </>
-          ) : (
-            <>
-          {/* If a friend is pre-selected as driver, show their car as a summary */}
+          {/* Friend's car summary — shown when a friend is pre-selected as driver */}
           {driverFriend?.car && (
             <div className="friend-car-badge">
               <span className="friend-car-badge-name">{driverFriend.displayName}'s car</span>
@@ -1500,9 +1459,15 @@ out geom;`,
             </div>
           )}
 
-          {/* Vehicle lookup — typeable comboboxes (type or pick from dropdown) */}
+          {/* Vehicle lookup — always shown for both EV and gas modes.
+              Selecting an EV trim auto-switches to EV mode and fills mi/kWh from EPA data. */}
           {!driverFriend && (
             <>
+              {isEV && !mpgData?.isEV && (
+                <p className="county-note" style={{marginBottom: 8}}>
+                  Select your EV below to auto-fill efficiency from EPA data, or enter mi/kWh manually.
+                </p>
+              )}
               <div className="car-grid">
                 <div className="field">
                   <label>Year</label>
@@ -1520,7 +1485,7 @@ out geom;`,
                     options={makes}
                     value={make}
                     onChange={setMake}
-                    placeholder={loadingMakes ? 'Loading…' : year ? 'e.g. Toyota' : 'Enter year first'}
+                    placeholder={loadingMakes ? 'Loading…' : year ? 'e.g. Tesla' : 'Enter year first'}
                     disabled={!year || loadingMakes}
                   />
                 </div>
@@ -1531,13 +1496,13 @@ out geom;`,
                     options={models}
                     value={model}
                     onChange={setModel}
-                    placeholder={loadingModels ? 'Loading…' : make ? 'e.g. Camry' : 'Enter make first'}
+                    placeholder={loadingModels ? 'Loading…' : make ? 'e.g. Model 3' : 'Enter make first'}
                     disabled={!make || loadingModels}
                   />
                 </div>
               </div>
 
-              {/* Trim picker — typeable, only shown when model has multiple trims */}
+              {/* Trim picker — only shown when model has multiple trims */}
               {options.length > 1 && (
                 <div className="field">
                   <label>Trim / Engine</label>
@@ -1563,54 +1528,102 @@ out geom;`,
           {!driverFriend && loadingMpg && <p className="loading-text">Loading vehicle data...</p>}
           {!driverFriend && carError && !loadingMpg && <p className="car-error">{carError}</p>}
 
-          {/* MPG display with city/combined/highway tabs */}
-          {mpgData && !loadingMpg && !showManual && (
-            <div className="mpg-display">
-              <div className="mpg-tabs">
-                {['city', 'combined', 'highway'].map(t => (
-                  <button
-                    key={t}
-                    // Template literal adds the 'active' class conditionally
-                    className={`mpg-tab${mpgType === t ? ' active' : ''}`}
-                    onClick={() => setMpgType(t)}
-                  >
-                    {t.charAt(0).toUpperCase() + t.slice(1)}  {/* capitalize first letter */}
-                  </button>
-                ))}
-              </div>
-              <div className="mpg-value">
-                <span className="mpg-number">{mpgData[mpgType] ?? '--'}</span>
-                <span className="mpg-label">MPG</span>
-              </div>
-            </div>
-          )}
-
-          {/* Manual MPG entry — toggle between vehicle lookup and manual input */}
-          <div className="manual-mpg-toggle">
-            {!showManual ? (
-              <button onClick={() => setShowManual(true)}>
-                Enter MPG manually instead
-              </button>
-            ) : (
-              <>
+          {/* EV mode: EPA badges + mi/kWh input */}
+          {isEV ? (
+            <>
+              {mpgData?.isEV && (
+                <div className="ev-specs-row">
+                  {mpgData.epaRange && (
+                    <span className="ev-spec-badge">
+                      EPA range: {mpgData.epaRange} mi
+                    </span>
+                  )}
+                  {mpgData.combMiPerKwh && (
+                    <span className="ev-spec-badge">
+                      {mpgData.combMiPerKwh} mi/kWh combined
+                    </span>
+                  )}
+                  {mpgData.cityMiPerKwh && (
+                    <span className="ev-spec-badge">
+                      {mpgData.cityMiPerKwh} mi/kWh city
+                    </span>
+                  )}
+                  {mpgData.highwayMiPerKwh && (
+                    <span className="ev-spec-badge">
+                      {mpgData.highwayMiPerKwh} mi/kWh hwy
+                    </span>
+                  )}
+                </div>
+              )}
+              <div className="field">
+                <label>Efficiency (mi/kWh)
+                  {mpgData?.isEV && milesPerKwh && <span className="badge">EPA data</span>}
+                </label>
                 <div className="manual-mpg-row">
                   <input
                     type="number"
-                    placeholder="e.g. 28"
-                    value={manualMpg}
-                    onChange={e => setManualMpg(e.target.value)}
-                    min="1"
+                    placeholder="e.g. 4.0"
+                    value={milesPerKwh}
+                    onChange={e => setMilesPerKwh(e.target.value)}
+                    min="0.1"
+                    step="0.1"
                   />
-                  <span>MPG</span>
+                  <span>mi/kWh</span>
                 </div>
-                {mpgData && (
-                  <button onClick={() => { setShowManual(false); setManualMpg('') }}>
-                    Use vehicle lookup instead
-                  </button>
+                {!mpgData?.isEV && (
+                  <p className="county-note" style={{marginTop: 6}}>Typical: 3–5 mi/kWh · find it on your car's dashboard or EPA spec sheet</p>
                 )}
-              </>
-            )}
-          </div>
+              </div>
+            </>
+          ) : (
+            <>
+              {/* MPG display with city/combined/highway tabs */}
+              {mpgData && !loadingMpg && !showManual && (
+                <div className="mpg-display">
+                  <div className="mpg-tabs">
+                    {['city', 'combined', 'highway'].map(t => (
+                      <button
+                        key={t}
+                        className={`mpg-tab${mpgType === t ? ' active' : ''}`}
+                        onClick={() => setMpgType(t)}
+                      >
+                        {t.charAt(0).toUpperCase() + t.slice(1)}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="mpg-value">
+                    <span className="mpg-number">{mpgData[mpgType] ?? '--'}</span>
+                    <span className="mpg-label">MPG</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Manual MPG entry */}
+              <div className="manual-mpg-toggle">
+                {!showManual ? (
+                  <button onClick={() => setShowManual(true)}>
+                    Enter MPG manually instead
+                  </button>
+                ) : (
+                  <>
+                    <div className="manual-mpg-row">
+                      <input
+                        type="number"
+                        placeholder="e.g. 28"
+                        value={manualMpg}
+                        onChange={e => setManualMpg(e.target.value)}
+                        min="1"
+                      />
+                      <span>MPG</span>
+                    </div>
+                    {mpgData && (
+                      <button onClick={() => { setShowManual(false); setManualMpg('') }}>
+                        Use vehicle lookup instead
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
             </>
           )}
 
