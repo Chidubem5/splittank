@@ -8,15 +8,17 @@ export default async function handler(req, res) {
   try {
     // EIA v2: monthly residential retail electricity price, all states, sorted newest first.
     // length=200 covers ~3-4 months for all states (some states lag by 1-2 months).
+    // No sectorid facet filter — filter for residential in code instead,
+    // since the exact facet value varies across EIA dataset versions.
+    // length=600 covers ~4 months × 50 states × 3 sectors comfortably.
     const url =
       `https://api.eia.gov/v2/electricity/retail-sales/data/` +
       `?api_key=${key}` +
       `&frequency=monthly` +
       `&data[0]=price` +
-      `&facets[sectorid][]=residential` +
       `&sort[0][column]=period` +
       `&sort[0][direction]=desc` +
-      `&length=200`
+      `&length=600`
 
     const r = await fetch(url)
     if (!r.ok) {
@@ -28,10 +30,13 @@ export default async function handler(req, res) {
 
     const rows = body?.response?.data ?? []
 
-    // Take the most recent period available for each state.
+    // Take the most recent residential period available for each state.
     const latest = {}
     for (const row of rows) {
       if (row.stateid === 'US') continue
+      // Filter for residential — sectorid value may be 'residential' or 'RES'
+      const sector = (row.sectorid ?? '').toLowerCase()
+      if (!sector.includes('res')) continue
       if (!latest[row.stateid] || row.period > latest[row.stateid].period) {
         latest[row.stateid] = row
       }
