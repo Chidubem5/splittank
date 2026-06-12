@@ -13,13 +13,17 @@ export default async function handler(req, res) {
       `?api_key=${key}` +
       `&frequency=monthly` +
       `&data[0]=price` +
-      `&facets[sectorName][]=residential` +
+      `&facets[sectorid][]=residential` +
       `&sort[0][column]=period` +
       `&sort[0][direction]=desc` +
       `&length=200`
 
     const r = await fetch(url)
-    if (!r.ok) return res.status(r.status).json({ error: 'EIA error' })
+    if (!r.ok) {
+      const errBody = await r.text()
+      console.error('[electricity] EIA returned', r.status, errBody)
+      return res.status(r.status).json({ error: 'EIA error', detail: errBody })
+    }
     const body = await r.json()
 
     const rows = body?.response?.data ?? []
