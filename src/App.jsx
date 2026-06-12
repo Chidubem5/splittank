@@ -46,7 +46,8 @@ import RoadHero from './components/RoadHero'               // decorative SVG ban
 import RoadGallery from './components/RoadGallery'         // three illustrated panels
 import PaymentButtons from './components/PaymentButtons'   // Venmo/CashApp/Zelle/Apple Pay buttons
 // Lazily loaded — pulled in only when the user first opens them
-const GasPriceMap  = lazy(() => import('./components/GasPriceMap'))
+const GasPriceMap        = lazy(() => import('./components/GasPriceMap'))
+const ElectricityRateMap = lazy(() => import('./components/ElectricityRateMap'))
 const AuthModal    = lazy(() => import('./components/AuthModal'))
 const ProfileModal = lazy(() => import('./components/ProfileModal'))
 const FriendsPanel = lazy(() => import('./components/FriendsPanel'))
@@ -168,6 +169,7 @@ export default function App() {
   const [showFriends, setShowFriends] = useState(false)
   const [menuOpen,    setMenuOpen]    = useState(false)
   const [showMap,     setShowMap]     = useState(false)
+  const [mapMode,     setMapMode]     = useState('gas')  // 'gas' | 'electric'
   const [mapPrices,   setMapPrices]   = useState(null)   // live EIA prices for all 50 states
 
   // useRef stores a reference to the dropdown DOM element.
@@ -2062,17 +2064,38 @@ out geom;`,
       </main>
 
       <div className="gas-map-toggle-section">
-        <button
-          className="gas-map-toggle-btn"
-          onClick={() => setShowMap(s => !s)}
-          aria-expanded={showMap}
-        >
-          <span>Gas Price Heat Map</span>
-          <span className="gas-map-toggle-icon" aria-hidden="true">{showMap ? '▲' : '▼'}</span>
-        </button>
+        <div className="gas-map-toggle-header">
+          <button
+            className="gas-map-toggle-btn"
+            onClick={() => setShowMap(s => !s)}
+            aria-expanded={showMap}
+          >
+            <span>{mapMode === 'electric' ? 'Electricity Rate Map' : 'Gas Price Heat Map'}</span>
+            <span className="gas-map-toggle-icon" aria-hidden="true">{showMap ? '▲' : '▼'}</span>
+          </button>
+          {showMap && (
+            <div className="map-mode-toggle">
+              <button
+                className={`map-mode-btn${mapMode === 'gas' ? ' active' : ''}`}
+                onClick={() => setMapMode('gas')}
+              >
+                Gas
+              </button>
+              <button
+                className={`map-mode-btn${mapMode === 'electric' ? ' active' : ''}`}
+                onClick={() => setMapMode('electric')}
+              >
+                Electric
+              </button>
+            </div>
+          )}
+        </div>
         {showMap && (
           <Suspense fallback={null}>
-            <GasPriceMap selectedState={state} selectedPrice={gasPrice} mapPrices={mapPrices} />
+            {mapMode === 'electric'
+              ? <ElectricityRateMap selectedState={state} electricityRate={electricityRate} />
+              : <GasPriceMap selectedState={state} selectedPrice={gasPrice} mapPrices={mapPrices} />
+            }
           </Suspense>
         )}
       </div>

@@ -1663,6 +1663,40 @@ input[type="number"]:disabled { opacity: 0.4; cursor: not-allowed; }
 ═══════════════════════════════════════════ */
 .gas-map-toggle-section { display: flex; flex-direction: column; }
 
+.gas-map-toggle-header {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+}
+.gas-map-toggle-header .gas-map-toggle-btn {
+  flex: 1;
+}
+
+.map-mode-toggle {
+  display: flex;
+  align-items: center;
+  background: var(--text);
+  border-top: 4px solid var(--yellow);
+  padding: 0 12px;
+  gap: 6px;
+}
+.map-mode-btn {
+  background: rgba(255,255,255,0.08);
+  color: rgba(255,255,255,0.55);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 20px;
+  padding: 5px 14px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+.map-mode-btn:hover { background: rgba(255,255,255,0.15); color: #fff; }
+.map-mode-btn.active { background: var(--yellow); color: #1A1A2E; border-color: var(--yellow); }
+
 .gas-map-toggle-btn {
   width: 100%;
   background: var(--text);
@@ -1839,6 +1873,17 @@ input[type="number"]:disabled { opacity: 0.4; cursor: not-allowed; }
     #FFC107 70%,
     #F9A825 85%,
     #E65100
+  );
+}
+.gas-map-gradient--electric {
+  background: linear-gradient(to right,
+    #1B5E20,
+    #388E3C 22%,
+    #8BC34A 42%,
+    #FFEB3B 57%,
+    #FF9800 72%,
+    #F44336 87%,
+    #880E4F
   );
 }
 
