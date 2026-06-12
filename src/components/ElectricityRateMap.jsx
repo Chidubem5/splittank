@@ -111,14 +111,22 @@ export default function ElectricityRateMap({ selectedState, electricityRate }) {
 
   useEffect(() => {
     fetch('/api/electricity')
-      .then(r => r.ok ? r.json() : null)
+      .then(r => {
+        if (!r.ok) {
+          r.json().then(e => console.error('[electricity] endpoint error', r.status, e)).catch(() => {})
+          return null
+        }
+        return r.json()
+      })
       .then(data => {
         if (data?.prices && !data.error) {
           setLivePrices(data.prices)
           setLivePeriod(data.period)
+        } else if (data) {
+          console.error('[electricity] unexpected response', data)
         }
       })
-      .catch(() => {})
+      .catch(err => console.error('[electricity] fetch failed', err))
   }, [])
 
   // Merge: live data overwrites static where available
