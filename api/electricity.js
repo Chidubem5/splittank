@@ -30,17 +30,12 @@ export default async function handler(req, res) {
 
     const rows = body?.response?.data ?? []
 
-    // Temporary debug — return raw first 3 rows so we can inspect the structure
-    if (rows.length === 0) return res.status(200).json({ debug: 'empty rows', total: rows.length, sample: body?.response })
-    return res.status(200).json({ debug: 'sample rows', total: rows.length, sample: rows.slice(0, 3) })
-
     // Take the most recent residential period available for each state.
+    // EIA uses sectorid "RES" for residential.
     const latest = {}
     for (const row of rows) {
       if (row.stateid === 'US') continue
-      // Filter for residential — sectorid value may be 'residential' or 'RES'
-      const sector = (row.sectorid ?? '').toLowerCase()
-      if (!sector.includes('res')) continue
+      if (row.sectorid !== 'RES') continue
       if (!latest[row.stateid] || row.period > latest[row.stateid].period) {
         latest[row.stateid] = row
       }

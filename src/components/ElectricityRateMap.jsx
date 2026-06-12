@@ -110,7 +110,7 @@ export default function ElectricityRateMap({ selectedState, electricityRate }) {
   const [livePeriod, setLivePeriod] = useState(null)
 
   useEffect(() => {
-    fetch('/api/electricity')
+    fetch('/api/electricity?v=2')
       .then(r => {
         if (!r.ok) {
           r.json().then(e => console.error('[electricity] endpoint error', r.status, e)).catch(() => {})
