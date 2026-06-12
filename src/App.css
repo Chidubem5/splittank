@@ -1877,12 +1877,13 @@ input[type="number"]:disabled { opacity: 0.4; cursor: not-allowed; }
 }
 .gas-map-gradient--electric {
   background: linear-gradient(to right,
-    #4527A0,
-    #7B1FA2 22%,
-    #C2185B 44%,
-    #E53935 65%,
-    #D32F2F 82%,
-    #B71C1C
+    #01579B,
+    #0288D1 22%,
+    #29B6F6 42%,
+    #E3F2FD 57%,
+    #FFC107 70%,
+    #F9A825 85%,
+    #E65100
   );
 }
 

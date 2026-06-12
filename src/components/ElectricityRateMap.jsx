@@ -4,14 +4,15 @@ import { STATE_ELECTRICITY_RATES } from '../data/electricityRates'
 
 const GEO_URL = 'https://cdn.jsdelivr.net/npm/us-atlas@3/states-10m.json'
 
-// Purple (cheap) → violet → magenta → red (expensive)
+// Same gradient as the gas map: deep blue (cheap) → yellow → amber (expensive)
 const COLOR_STOPS = [
-  { t: 0.00, rgb: [69,  39, 160]  },  // deep purple  — cheapest (~$0.08)
-  { t: 0.22, rgb: [123,  31, 162]  }, // purple
-  { t: 0.44, rgb: [194,  24, 91]   }, // dark pink/magenta
-  { t: 0.65, rgb: [229,  57, 53]   }, // red
-  { t: 0.82, rgb: [211,  47, 47]   }, // deep red
-  { t: 1.00, rgb: [183,  28, 28]   }, // darkest red  — most expensive (~$0.39)
+  { t: 0.00, rgb: [1,   87,  155] },  // #01579B  deep blue      — cheapest
+  { t: 0.22, rgb: [2,  136,  209] },  // #0288D1  --blue-dark
+  { t: 0.42, rgb: [41, 182,  246] },  // #29B6F6  --blue
+  { t: 0.57, rgb: [227,242,  253] },  // #E3F2FD  --blue-light   (bridge)
+  { t: 0.70, rgb: [255,193,    7] },  // #FFC107  --yellow
+  { t: 0.85, rgb: [249,168,   37] },  // #F9A825  --yellow-dark
+  { t: 1.00, rgb: [230, 81,    0] },  // #E65100  deep amber      — most expensive
 ]
 
 const MIN_RATE = 0.08
