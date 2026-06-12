@@ -4,15 +4,14 @@ import { STATE_ELECTRICITY_RATES } from '../data/electricityRates'
 
 const GEO_URL = 'https://cdn.jsdelivr.net/npm/us-atlas@3/states-10m.json'
 
-// Green (cheap) → yellow → orange → red (expensive)
+// Purple (cheap) → violet → magenta → red (expensive)
 const COLOR_STOPS = [
-  { t: 0.00, rgb: [27,  94,  32]  },  // deep green   — cheapest (~$0.08)
-  { t: 0.22, rgb: [56, 142,  60]  },  // green
-  { t: 0.42, rgb: [139, 195, 74]  },  // light green
-  { t: 0.57, rgb: [255, 235, 59]  },  // yellow       (bridge)
-  { t: 0.72, rgb: [255, 152,  0]  },  // orange
-  { t: 0.87, rgb: [244,  67, 54]  },  // red
-  { t: 1.00, rgb: [136,  14, 79]  },  // deep red/purple — most expensive (~$0.39)
+  { t: 0.00, rgb: [69,  39, 160]  },  // deep purple  — cheapest (~$0.08)
+  { t: 0.22, rgb: [123,  31, 162]  }, // purple
+  { t: 0.44, rgb: [194,  24, 91]   }, // dark pink/magenta
+  { t: 0.65, rgb: [229,  57, 53]   }, // red
+  { t: 0.82, rgb: [211,  47, 47]   }, // deep red
+  { t: 1.00, rgb: [183,  28, 28]   }, // darkest red  — most expensive (~$0.39)
 ]
 
 const MIN_RATE = 0.08
