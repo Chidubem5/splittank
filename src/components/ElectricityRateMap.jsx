@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { ComposableMap, Geographies, Geography, ZoomableGroup, Marker } from 'react-simple-maps'
 import { STATE_ELECTRICITY_RATES } from '../data/electricityRates'
 
@@ -94,11 +94,38 @@ function rateColor(rate) {
 // Format $/kWh as cents string for compact map labels: 0.138 → "14¢"
 function toCents(rate) { return `${Math.round(rate * 100)}¢` }
 
+// Format EIA period string "2025-03" → "Mar 2025"
+function formatPeriod(p) {
+  if (!p) return ''
+  const [y, m] = p.split('-')
+  const month = new Date(Number(y), Number(m) - 1).toLocaleString('en-US', { month: 'short' })
+  return `${month} ${y}`
+}
+
 export default function ElectricityRateMap({ selectedState, electricityRate }) {
-  const [tooltip, setTooltip] = useState(null)
-  const [tapInfo, setTapInfo] = useState(null)
-  const [zoom,    setZoom]    = useState(DEFAULT_ZOOM)
-  const [center,  setCenter]  = useState(DEFAULT_CENTER)
+  const [tooltip,    setTooltip]    = useState(null)
+  const [tapInfo,    setTapInfo]    = useState(null)
+  const [zoom,       setZoom]       = useState(DEFAULT_ZOOM)
+  const [center,     setCenter]     = useState(DEFAULT_CENTER)
+  const [livePrices, setLivePrices] = useState(null)
+  const [livePeriod, setLivePeriod] = useState(null)
+
+  useEffect(() => {
+    fetch('/api/electricity')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data?.prices && !data.error) {
+          setLivePrices(data.prices)
+          setLivePeriod(data.period)
+        }
+      })
+      .catch(() => {})
+  }, [])
+
+  // Merge: live data overwrites static where available
+  const rates = livePrices
+    ? { ...STATE_ELECTRICITY_RATES, ...livePrices }
+    : STATE_ELECTRICITY_RATES
 
   const isMobile = window.innerWidth < 640
 
@@ -106,7 +133,7 @@ export default function ElectricityRateMap({ selectedState, electricityRate }) {
   const isDark = hour >= 19 || hour < 6
 
   const enteredRate  = electricityRate ? parseFloat(electricityRate) : NaN
-  const displayRate  = !isNaN(enteredRate) ? enteredRate : STATE_ELECTRICITY_RATES[selectedState]
+  const displayRate  = !isNaN(enteredRate) ? enteredRate : rates[selectedState]
 
   function handleZoomIn()  { setZoom(z => Math.min(z * 1.5, 8)) }
   function handleZoomOut() { setZoom(z => Math.max(z / 1.5, 1)) }
@@ -121,7 +148,11 @@ export default function ElectricityRateMap({ selectedState, electricityRate }) {
       <div className="gas-map-header">
         <div>
           <h2 className="gas-map-title">Electricity Rates by State</h2>
-          <p className="gas-map-sub">2024 annual averages · Source: EIA</p>
+          <p className="gas-map-sub">
+            {livePeriod
+              ? `${formatPeriod(livePeriod)} · Live monthly data · Source: EIA`
+              : '2024 annual averages · Source: EIA'}
+          </p>
         </div>
 
         {selectedState && displayRate ? (
@@ -156,7 +187,7 @@ export default function ElectricityRateMap({ selectedState, electricityRate }) {
               {({ geographies }) =>
                 geographies.map(geo => {
                   const name       = geo.properties.name
-                  const rate       = STATE_ELECTRICITY_RATES[name]
+                  const rate       = rates[name]
                   const isSelected = name === selectedState
                   return (
                     <Geography
@@ -188,7 +219,7 @@ export default function ElectricityRateMap({ selectedState, electricityRate }) {
 
             {!isMobile && Object.entries(STATE_LABELS).map(([name, info]) => {
               if (!info) return null
-              const rate = STATE_ELECTRICITY_RATES[name]
+              const rate = rates[name]
               if (!rate) return null
               const pw = info.size * 3.2
               const ph = info.size * 1.5
