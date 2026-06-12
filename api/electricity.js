@@ -2,7 +2,7 @@
 // Returns { "California": 0.2410, "Texas": 0.1380, ... } ($/kWh)
 // Cached at Vercel's edge for 7 days — electricity rates change at most monthly.
 export default async function handler(req, res) {
-  const key = process.env.VITE_EIA_API_KEY
+  const key = process.env.EIA_API_KEY || process.env.VITE_EIA_API_KEY
   if (!key) return res.status(503).json({ error: 'not configured' })
 
   try {
