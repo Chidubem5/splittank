@@ -15,7 +15,6 @@ export default function PlaceAutocomplete({ value, onChange, onSelect, placehold
   const containerRef = useRef(null)
   const sessionRef   = useRef(makeSessionToken())
 
-  // Close dropdown when tapping/clicking outside — pointerdown covers both mouse and touch
   useEffect(() => {
     function onOutside(e) {
       if (containerRef.current && !containerRef.current.contains(e.target)) setOpen(false)
@@ -23,6 +22,30 @@ export default function PlaceAutocomplete({ value, onChange, onSelect, placehold
     document.addEventListener('pointerdown', onOutside)
     return () => document.removeEventListener('pointerdown', onOutside)
   }, [])
+
+  // Single Mapbox suggest call. Returns filtered suggestions array (empty on error).
+  async function fetchOnce(searchQuery, limit = 5) {
+    try {
+      const res = await fetch(
+        `https://api.mapbox.com/search/searchbox/v1/suggest` +
+        `?q=${encodeURIComponent(searchQuery)}` +
+        `&access_token=${TOKEN}` +
+        `&session_token=${sessionRef.current}` +
+        `&types=address,poi,place,locality,neighborhood,postcode` +
+        `&proximity=ip` +
+        `&limit=${limit}` +
+        `&language=en`
+      )
+      if (!res.ok) return []
+      const data = await res.json()
+      // Filter out Airbnb/VRBO rental noise — real places have at least one poi_category
+      return (data.suggestions ?? []).filter(s =>
+        s.poi_category === null || s.poi_category === undefined || s.poi_category.length > 0
+      )
+    } catch {
+      return []
+    }
+  }
 
   function handleChange(e) {
     const q = e.target.value
@@ -38,36 +61,28 @@ export default function PlaceAutocomplete({ value, onChange, onSelect, placehold
 
     clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(async () => {
-      try {
-        const searchQ = expandAcronym(q) ?? q
-        const res = await fetch(
-          `https://api.mapbox.com/search/searchbox/v1/suggest` +
-          `?q=${encodeURIComponent(searchQ)}` +
-          `&access_token=${TOKEN}` +
-          `&session_token=${sessionRef.current}` +
-          `&types=address,poi,place,locality,neighborhood,postcode` +
-          `&proximity=ip` +
-          `&limit=5` +
-          `&language=en`
-        )
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}))
-          console.error('[PlaceAutocomplete] Mapbox API error', res.status, err)
-          setSuggestions([]); return
-        }
-        const data = await res.json()
-        // Filter out vacation rental / unclassified listing noise.
-        // Real places (beaches, hospitals, clubs) always have at least one poi_category.
-        // Rental listings (Airbnb, VRBO, etc.) come back with poi_category: [] and maki: 'marker'.
-        const suggestions = (data.suggestions ?? []).filter(s =>
-          s.poi_category === null || s.poi_category === undefined || s.poi_category.length > 0
-        )
-        setSuggestions(suggestions)
-        setOpen(suggestions.length > 0)
-      } catch (err) {
-        console.error('[PlaceAutocomplete] fetch failed', err)
-        setSuggestions([])
+      const expanded = expandAcronym(q) ?? q
+
+      let results
+      if (Array.isArray(expanded)) {
+        // Ambiguous acronym (e.g. BC → Boston College | Bates | Babson)
+        // Run one search per possible meaning, take top 2 each, deduplicate
+        const arrays = await Promise.all(expanded.map(term => fetchOnce(term, 2)))
+        const seen = new Set()
+        results = arrays.flat().filter(s => {
+          if (seen.has(s.mapbox_id)) return false
+          seen.add(s.mapbox_id)
+          return true
+        })
+      } else {
+        results = await fetchOnce(expanded)
       }
+
+      if (results.length === 0) {
+        console.warn('[PlaceAutocomplete] no suggestions for', q, '→', expanded)
+      }
+      setSuggestions(results)
+      setOpen(results.length > 0)
     }, 280)
   }
 
@@ -104,7 +119,6 @@ export default function PlaceAutocomplete({ value, onChange, onSelect, placehold
     if (e.key === 'Escape') setOpen(false)
   }
 
-  // On mobile, scroll the input into view after the keyboard opens
   function handleFocus() {
     setTimeout(() => {
       containerRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
@@ -132,8 +146,6 @@ export default function PlaceAutocomplete({ value, onChange, onSelect, placehold
               role="option"
               aria-selected={i === activeIdx}
               className={`place-suggestion-item${i === activeIdx ? ' active' : ''}`}
-              // pointerdown fires before the input loses focus on both mouse and touch,
-              // so the dropdown is still open when we call pick()
               onPointerDown={e => { e.preventDefault(); pick(s) }}
               onMouseEnter={() => setActiveIdx(i)}
             >
