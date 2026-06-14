@@ -4,7 +4,7 @@
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' })
 
-  const { polyline } = req.body || {}
+  const { polyline, vehicleType = '2AxlesAuto' } = req.body || {}
   if (!polyline) return res.status(400).json({ error: 'polyline required' })
 
   const key = process.env.TOLLGURU_KEY
@@ -16,7 +16,7 @@ export default async function handler(req, res) {
       headers: { 'x-api-key': key, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         polyline:    { encodedPolyline: polyline },
-        vehicleType: '2AxlesAuto',
+        vehicleType,
         units:       { currency: 'USD' },
       }),
     })

@@ -136,8 +136,10 @@ export default function App() {
   const [sentPhones,      setSentPhones]      = useState(new Set())
 
 // ── Tolls ─────────────────────────────────────────────────────────────────
-  const [tolls,          setTolls]          = useState('')
-  const [tollsEstimated, setTollsEstimated] = useState(false) // true when auto-filled from route
+  const [tolls,            setTolls]            = useState('')
+  const [tollsEstimated,   setTollsEstimated]   = useState(false)
+  const [tollVehicleType,  setTollVehicleType]  = useState('2AxlesAuto')
+  const [storedRouteCoords,setStoredRouteCoords]= useState(null)
 
   // ── Route / address lookup ────────────────────────────────────────────────
   const [tripFrom,     setTripFrom]     = useState('')
@@ -495,7 +497,7 @@ export default function App() {
   // Primary:  TollGuru API — actual cash tolls for the exact roads driven.
   //           Requires TOLLGURU_KEY in Vercel env vars (server-side only).
   // Fallback: OSM node + way detection — inflation-adjusted per-event/per-mile rates.
-  async function estimateTolls(routeCoords) {
+  async function estimateTolls(routeCoords, vehicleType = tollVehicleType) {
     if (!routeCoords?.length) return null
 
     // ── Primary: TollGuru (accurate cash tolls for exact roads) ────────────
@@ -503,7 +505,7 @@ export default function App() {
       const r = await fetch('/api/tolls', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ polyline: encodePolyline(routeCoords) }),
+        body: JSON.stringify({ polyline: encodePolyline(routeCoords), vehicleType }),
       })
       if (r.ok) {
         const data = await r.json()
@@ -723,6 +725,7 @@ out geom;`,
       // Estimate tolls from the route geometry in the background.
       const coords = route.geometry?.coordinates
       if (coords?.length) {
+        setStoredRouteCoords(coords)
         estimateTolls(coords).then(amount => {
           if (amount !== null) {
             setTolls(String(amount))
@@ -949,6 +952,14 @@ out geom;`,
       }
     })
   }, [state, county, isEV]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Re-estimate tolls when vehicle type changes (trucks pay different rates)
+  useEffect(() => {
+    if (!storedRouteCoords) return
+    estimateTolls(storedRouteCoords, tollVehicleType).then(amount => {
+      if (amount !== null) { setTolls(String(amount)); setTollsEstimated(true) }
+    }).catch(() => {})
+  }, [tollVehicleType]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch live prices for all 50 states once on mount so the heat map
   // shows EIA weekly data instead of the static fallback prices.
@@ -1679,6 +1690,22 @@ out geom;`,
                 : 'Auto-estimated from your route — edit if you know the exact amount.'
               : 'Tolls are auto-filled when you enter both addresses above.'}
           </p>
+          <div className="fuel-toggle-row">
+            {[
+              { value: '2AxlesAuto', label: '🚗 Car / SUV' },
+              { value: '3Axles',     label: '🚚 Truck / Van' },
+              { value: '5Axles',     label: '🚛 Semi / 18-Wheeler' },
+            ].map(opt => (
+              <button
+                key={opt.value}
+                className={`fuel-toggle-btn${tollVehicleType === opt.value ? ' active' : ''}`}
+                onClick={() => setTollVehicleType(opt.value)}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+
           <div className="field">
             <label>
               Total tolls ($)
