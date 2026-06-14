@@ -548,8 +548,8 @@ out geom;`,
     const stateName = geoData?.address?.state ?? null
     const ratePerEvent = getTollRate(stateName) * inflationMultiplier
 
-    const NEAR = 0.015    // ~1.5 km proximity to route
-    const CLUSTER = 0.002 // ~200 m — nearby booths in same plaza = one event
+    const NEAR = 0.002    // ~200 m — must be very close to route to count
+    const CLUSTER = 0.001 // ~100 m — nearby booths in same plaza = one event
 
     // ── Toll nodes: physical booths ────────────────────────────────────────
     const nearNodes = elements
