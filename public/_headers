@@ -8,3 +8,19 @@
   Cross-Origin-Opener-Policy: same-origin-allow-popups
   Cross-Origin-Resource-Policy: same-origin
   Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://api.eia.gov https://api.bls.gov https://cdn.jsdelivr.net https://router.project-osrm.org https://overpass-api.de https://nominatim.openstreetmap.org https://photon.komoot.io https://www.fueleconomy.gov https://api.census.gov https://*.googleapis.com https://*.firebaseio.com https://*.firebaseapp.com wss://*.firebaseio.com; font-src 'self'; frame-src 'self' https://*.firebaseapp.com https://accounts.google.com https://www.facebook.com https://appleid.apple.com; object-src 'none'; base-uri 'self'; form-action 'self'; worker-src 'none'; upgrade-insecure-requests
+
+# Allow iMessage, Android, Discord, Slack to fetch preview and logo images
+/preview-coin.jpg
+  Cross-Origin-Resource-Policy: cross-origin
+
+/preview-coin.png
+  Cross-Origin-Resource-Policy: cross-origin
+
+/logo-192.png
+  Cross-Origin-Resource-Policy: cross-origin
+
+/logo-512.png
+  Cross-Origin-Resource-Policy: cross-origin
+
+/favicon-32.png
+  Cross-Origin-Resource-Policy: cross-origin
