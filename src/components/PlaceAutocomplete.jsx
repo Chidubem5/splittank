@@ -32,7 +32,11 @@ export default function PlaceAutocomplete({ value, onChange, onSelect, placehold
     onSelect(null)
     setActiveIdx(-1)
 
-    if (!TOKEN || q.length < 2) { setSuggestions([]); setOpen(false); return }
+    if (!TOKEN) {
+      console.warn('[PlaceAutocomplete] VITE_MAPBOX_TOKEN is not set — autocomplete disabled')
+      setSuggestions([]); setOpen(false); return
+    }
+    if (q.length < 2) { setSuggestions([]); setOpen(false); return }
 
     clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(async () => {
@@ -48,10 +52,17 @@ export default function PlaceAutocomplete({ value, onChange, onSelect, placehold
           `&limit=5` +
           `&language=en`
         )
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}))
+          console.error('[PlaceAutocomplete] Mapbox API error', res.status, err)
+          setSuggestions([]); return
+        }
         const data = await res.json()
+        console.log('[PlaceAutocomplete] suggestions:', data.suggestions?.length ?? 0, 'for', q)
         setSuggestions(data.suggestions ?? [])
         setOpen((data.suggestions?.length ?? 0) > 0)
-      } catch {
+      } catch (e) {
+        console.error('[PlaceAutocomplete] fetch failed', e)
         setSuggestions([])
       }
     }, 280)
