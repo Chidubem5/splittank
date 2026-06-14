@@ -2,14 +2,22 @@ import { useState, useRef, useEffect } from 'react'
 
 const TOKEN = import.meta.env.VITE_MAPBOX_TOKEN
 
+// Mapbox Search Box v1 — much better POI coverage than v5 geocoding.
+// Two-step: suggest() → retrieve() to get coordinates.
+// Session token groups requests for billing efficiency.
+function makeSessionToken() {
+  return crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2)
+}
+
 export default function PlaceAutocomplete({ value, onChange, onSelect, placeholder }) {
   const [suggestions, setSuggestions] = useState([])
   const [open,        setOpen]        = useState(false)
   const [activeIdx,   setActiveIdx]   = useState(-1)
-  const debounceRef   = useRef(null)
-  const containerRef  = useRef(null)
+  const debounceRef    = useRef(null)
+  const containerRef   = useRef(null)
+  const sessionRef     = useRef(makeSessionToken())
 
-  // Close dropdown when clicking outside
+  // Close dropdown on outside click
   useEffect(() => {
     function onMouseDown(e) {
       if (containerRef.current && !containerRef.current.contains(e.target)) setOpen(false)
@@ -21,7 +29,7 @@ export default function PlaceAutocomplete({ value, onChange, onSelect, placehold
   function handleChange(e) {
     const q = e.target.value
     onChange(q)
-    onSelect(null)      // clear stored coords so fetchRoute re-geocodes if needed
+    onSelect(null)
     setActiveIdx(-1)
 
     if (!TOKEN || q.length < 2) { setSuggestions([]); setOpen(false); return }
@@ -30,22 +38,48 @@ export default function PlaceAutocomplete({ value, onChange, onSelect, placehold
     debounceRef.current = setTimeout(async () => {
       try {
         const res = await fetch(
-          `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json` +
-          `?access_token=${TOKEN}&autocomplete=true&types=address,poi,place,locality,neighborhood&limit=6`
+          `https://api.mapbox.com/search/searchbox/v1/suggest` +
+          `?q=${encodeURIComponent(q)}` +
+          `&access_token=${TOKEN}` +
+          `&session_token=${sessionRef.current}` +
+          `&types=address,poi,place,locality,neighborhood,postcode` +
+          `&poi_category=education,entertainment,nightlife,landmark,venue` +
+          `&proximity=ip` +
+          `&limit=5` +
+          `&language=en`
         )
         const data = await res.json()
-        setSuggestions(data.features ?? [])
-        setOpen((data.features?.length ?? 0) > 0)
+        setSuggestions(data.suggestions ?? [])
+        setOpen((data.suggestions?.length ?? 0) > 0)
       } catch {
         setSuggestions([])
       }
     }, 280)
   }
 
-  function pick(feature) {
-    const [lon, lat] = feature.geometry.coordinates
-    onChange(feature.place_name)
-    onSelect({ lat, lon })
+  async function pick(suggestion) {
+    // Retrieve full details (including coordinates) for the selected suggestion
+    try {
+      const res = await fetch(
+        `https://api.mapbox.com/search/searchbox/v1/retrieve/${suggestion.mapbox_id}` +
+        `?access_token=${TOKEN}` +
+        `&session_token=${sessionRef.current}`
+      )
+      const data = await res.json()
+      const feature = data.features?.[0]
+      if (feature) {
+        const [lon, lat] = feature.geometry.coordinates
+        const addr = feature.properties?.full_address ?? suggestion.full_address ?? suggestion.name
+        onChange(addr)
+        onSelect({ lat, lon })
+        // Reset session token after a completed search
+        sessionRef.current = makeSessionToken()
+      }
+    } catch {
+      // Fallback: just set the name without coords (geocoding chain will handle it)
+      onChange(suggestion.full_address ?? suggestion.name)
+      onSelect(null)
+    }
     setSuggestions([])
     setOpen(false)
     setActiveIdx(-1)
@@ -72,24 +106,21 @@ export default function PlaceAutocomplete({ value, onChange, onSelect, placehold
       />
       {open && suggestions.length > 0 && (
         <ul className="place-suggestions" role="listbox">
-          {suggestions.map((f, i) => {
-            const context = f.place_name.startsWith(f.text)
-              ? f.place_name.slice(f.text.length).replace(/^,\s*/, '')
-              : f.place_name
-            return (
-              <li
-                key={f.id}
-                role="option"
-                aria-selected={i === activeIdx}
-                className={`place-suggestion-item${i === activeIdx ? ' active' : ''}`}
-                onMouseDown={() => pick(f)}
-                onMouseEnter={() => setActiveIdx(i)}
-              >
-                <span className="place-suggestion-name">{f.text}</span>
-                {context && <span className="place-suggestion-context">{context}</span>}
-              </li>
-            )
-          })}
+          {suggestions.map((s, i) => (
+            <li
+              key={s.mapbox_id}
+              role="option"
+              aria-selected={i === activeIdx}
+              className={`place-suggestion-item${i === activeIdx ? ' active' : ''}`}
+              onMouseDown={() => pick(s)}
+              onMouseEnter={() => setActiveIdx(i)}
+            >
+              <span className="place-suggestion-name">{s.name}</span>
+              {s.full_address && (
+                <span className="place-suggestion-context">{s.full_address}</span>
+              )}
+            </li>
+          ))}
         </ul>
       )}
     </div>
