@@ -42,6 +42,7 @@ import { fetchTollInflationMultiplier } from './api/tollInflation'  // BLS CPI m
 import { fetchStateGasPrice, fetchAllStatePrices, normalizeCounty, METRO_STATES } from './api/gasPrice'
 import { fetchCounties } from './api/counties'             // Census Bureau county list
 import Combobox from './components/Combobox'               // custom typeahead input (replaces <datalist>)
+import PlaceAutocomplete from './components/PlaceAutocomplete'
 import RoadHero from './components/RoadHero'               // decorative SVG banner
 import RoadGallery from './components/RoadGallery'         // three illustrated panels
 import PaymentButtons from './components/PaymentButtons'   // Venmo/CashApp/Zelle/Apple Pay buttons
@@ -141,6 +142,8 @@ export default function App() {
   // ── Route / address lookup ────────────────────────────────────────────────
   const [tripFrom,     setTripFrom]     = useState('')
   const [tripTo,       setTripTo]       = useState('')
+  const [fromCoords,   setFromCoords]   = useState(null)  // {lat,lon} pre-resolved by autocomplete
+  const [toCoords,     setToCoords]     = useState(null)
   const [routeLoading, setRouteLoading] = useState(false)
   const [routeError,   setRouteError]   = useState('')
   const [cityRatio,    setCityRatio]    = useState(null) // 0–1 fraction that is city driving; null = not calculated
@@ -661,7 +664,11 @@ out geom;`,
     setCityRatio(null)
     setRouteSegments([])
     try {
-      const [from, to] = await Promise.all([geocode(tripFrom), geocode(tripTo)])
+      // Use autocomplete-resolved coords directly when available — skips the geocoding chain
+      const [from, to] = await Promise.all([
+        fromCoords ? Promise.resolve(fromCoords) : geocode(tripFrom),
+        toCoords   ? Promise.resolve(toCoords)   : geocode(tripTo),
+      ])
       if (!from || !to) {
         setRouteError("Couldn't find one or both locations. Try adding a city or state, or use a well-known landmark name.")
         return
@@ -1187,17 +1194,17 @@ out geom;`,
 
             {showRoute && (
               <div className="route-fields">
-                <input
-                  type="text"
-                  placeholder="From — e.g. 123 Main St, Boston MA"
+                <PlaceAutocomplete
                   value={tripFrom}
-                  onChange={e => { setTripFrom(e.target.value); setCityRatio(null); setRouteSegments([]) }}
+                  onChange={v => { setTripFrom(v); setCityRatio(null); setRouteSegments([]) }}
+                  onSelect={setFromCoords}
+                  placeholder="From — city, address, or place name"
                 />
-                <input
-                  type="text"
-                  placeholder="To — e.g. 456 Oak Ave, Providence RI"
+                <PlaceAutocomplete
                   value={tripTo}
-                  onChange={e => { setTripTo(e.target.value); setCityRatio(null); setRouteSegments([]) }}
+                  onChange={v => { setTripTo(v); setCityRatio(null); setRouteSegments([]) }}
+                  onSelect={setToCoords}
+                  placeholder="To — city, address, or place name"
                 />
                 <button
                   type="button"
