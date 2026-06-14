@@ -43,3 +43,11 @@ export const TOLL_RATE_BY_STATE = {
 export function getTollRate(stateName) {
   return TOLL_RATE_BY_STATE[stateName] ?? TOLL_RATE_BY_STATE['_default']
 }
+
+// Base per-mile toll rates by vehicle class (2024 US national averages).
+// Multiply by the live CPI inflation multiplier before displaying to the user.
+export const TOLL_RATE_PER_MILE = {
+  '2AxlesAuto': 0.12,   // passenger car / SUV
+  '3Axles':     0.22,   // pickup truck / van
+  '5Axles':     0.35,   // semi / 18-wheeler
+}

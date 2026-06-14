@@ -37,7 +37,7 @@
 import { useState, useEffect, useRef, useMemo, lazy, Suspense } from 'react'
 import { getYears, getMakes, getModels, getOptions, getVehicleMPG, estimateTankSize } from './api/fuelEconomy'
 import { STATE_GAS_PRICES } from './data/gasPrices'      // offline fallback prices
-import { getTollRate }      from './data/tollRates'        // base toll cost per state
+import { getTollRate, TOLL_RATE_PER_MILE } from './data/tollRates'
 import { fetchTollInflationMultiplier } from './api/tollInflation'  // BLS CPI multiplier
 import { fetchStateGasPrice, fetchAllStatePrices, normalizeCounty, METRO_STATES } from './api/gasPrice'
 import { fetchCounties } from './api/counties'             // Census Bureau county list
@@ -494,22 +494,34 @@ export default function App() {
   }
 
   // Estimates toll costs for a route.
-  // Primary:  TollGuru API — actual cash tolls for the exact roads driven.
-  //           Requires TOLLGURU_KEY in Vercel env vars (server-side only).
+  // Primary:  TomTom Routing API — detects toll road sections, estimates cost by mileage.
+  //           Requires TOMTOM_KEY in Vercel env vars (server-side only).
   // Fallback: OSM node + way detection — inflation-adjusted per-event/per-mile rates.
   async function estimateTolls(routeCoords, vehicleType = tollVehicleType) {
     if (!routeCoords?.length) return null
 
-    // ── Primary: TollGuru (accurate cash tolls for exact roads) ────────────
+    // ── Primary: TomTom (toll road detection for exact origin→destination) ──
     try {
-      const r = await fetch('/api/tolls', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ polyline: encodePolyline(routeCoords), vehicleType }),
-      })
+      const first = routeCoords[0]
+      const last  = routeCoords[routeCoords.length - 1]
+      const [r, inflationMult] = await Promise.all([
+        fetch('/api/tolls', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fromLat: first[1], fromLon: first[0],
+            toLat:   last[1],  toLon:   last[0],
+            vehicleType,
+          }),
+        }),
+        fetchTollInflationMultiplier(),
+      ])
       if (r.ok) {
         const data = await r.json()
-        if (data.toll != null) return data.toll
+        if (data.tollMiles != null) {
+          const baseRate = TOLL_RATE_PER_MILE[vehicleType] ?? TOLL_RATE_PER_MILE['2AxlesAuto']
+          return parseFloat((data.tollMiles * baseRate * inflationMult).toFixed(2))
+        }
       }
     } catch {}
 
