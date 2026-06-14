@@ -445,7 +445,8 @@ export default function App() {
         const suggestRes = await fetch(
           `https://api.mapbox.com/search/searchbox/v1/suggest` +
           `?q=${encodeURIComponent(q)}&access_token=${token}&session_token=${session}` +
-          `&types=address,poi,place&limit=5&language=en&country=us`
+          `&types=address,poi,place&limit=5&language=en&country=us` +
+          `&poi_category=education,entertainment,nightlife,landmark,venue,park,beach,recreation_area,natural_feature`
         )
         const suggestData = await suggestRes.json()
         const suggestions = suggestData.suggestions ?? []
