@@ -161,11 +161,12 @@ export default function App() {
   const [loadingCounties,setLoadingCounties]= useState(false)
 
   // ── Geolocation state ─────────────────────────────────────────────────────
-  const [detectingLocation, setDetectingLocation] = useState(false)
-  const [detectedLocation,  setDetectedLocation]  = useState(null) // { city, county, state }
-  const [locationError,     setLocationError]     = useState(null)
-  const [locationDenied,    setLocationDenied]    = useState(false) // true when blocked by settings
-  const [showManualState,   setShowManualState]   = useState(false)
+  const [detectingLocation,    setDetectingLocation]    = useState(false)
+  const [detectingAddressLoc,  setDetectingAddressLoc]  = useState(false)
+  const [detectedLocation,     setDetectedLocation]     = useState(null) // { city, county, state }
+  const [locationError,        setLocationError]        = useState(null)
+  const [locationDenied,       setLocationDenied]       = useState(false) // true when blocked by settings
+  const [showManualState,      setShowManualState]      = useState(false)
 
   // ── Auth + modal state ────────────────────────────────────────────────────
   // useAuth() reads from AuthContext — the sign-in state managed in AuthContext.jsx
@@ -912,6 +913,44 @@ out geom;`,
     )
   }
 
+  // Detect gas price state from the starting address instead of GPS.
+  // Uses autocomplete-resolved coords when available; falls back to geocoding the text.
+  async function detectLocationFromAddress() {
+    if (!tripFrom.trim()) return
+    setDetectingAddressLoc(true)
+    setLocationError(null)
+    try {
+      const coords = fromCoords ?? await geocode(tripFrom)
+      if (!coords) {
+        setLocationError("Couldn't find that address. Try being more specific.")
+        setShowManualState(true)
+        setDetectingAddressLoc(false)
+        return
+      }
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?lat=${coords.lat}&lon=${coords.lon}&format=json`,
+        { headers: { 'Accept-Language': 'en' } }
+      )
+      const data = await res.json()
+      const addr = data.address || {}
+      const stateName = addr.state
+      const city = addr.city || addr.town || addr.village || null
+      const county = addr.county || addr.city_district || null
+      if (stateName && STATE_GAS_PRICES[stateName]) {
+        setState(stateName)
+        setDetectedLocation({ city, county, state: stateName })
+        setShowManualState(false)
+      } else {
+        setLocationError("Couldn't determine your state from that address.")
+        setShowManualState(true)
+      }
+    } catch {
+      setLocationError('Location lookup failed. Select your state manually.')
+      setShowManualState(true)
+    }
+    setDetectingAddressLoc(false)
+  }
+
   // Load the list of model years once on mount.
   useEffect(() => {
     getYears()
@@ -1397,13 +1436,28 @@ out geom;`,
                   type="button"
                   className="use-location-btn"
                   onClick={detectLocation}
-                  disabled={detectingLocation}
+                  disabled={detectingLocation || detectingAddressLoc}
                 >
                   {detectingLocation
                     ? <><span className="location-spinner" /> Detecting your location…</>
                     : <><span className="location-pin-icon">📍</span> Use My Location</>
                   }
                 </button>
+
+                {tripFrom.trim() && (
+                  <button
+                    type="button"
+                    className="use-address-loc-btn"
+                    onClick={detectLocationFromAddress}
+                    disabled={detectingLocation || detectingAddressLoc}
+                  >
+                    {detectingAddressLoc
+                      ? <><span className="location-spinner" /> Detecting…</>
+                      : <>Or use starting address</>
+                    }
+                  </button>
+                )}
+
                 {locationError && (
                   <div className="location-error-block">
                     <p className="location-error">{locationError}</p>
@@ -1418,7 +1472,6 @@ out geom;`,
                   <div className="manual-state-row">
                     <select value={state} onChange={e => setState(e.target.value)}>
                       <option value="">Select a state...</option>
-                      {/* Object.keys() gives us the state names; .sort() alphabetizes them */}
                       {Object.keys(STATE_GAS_PRICES).sort().map(s => (
                         <option key={s} value={s}>{s}</option>
                       ))}

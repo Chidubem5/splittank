@@ -344,6 +344,30 @@ input[type="number"]:disabled { opacity: 0.4; cursor: not-allowed; }
 .use-location-btn:active:not(:disabled) { transform: scale(0.98); }
 .use-location-btn:disabled { opacity: 0.65; cursor: not-allowed; }
 
+.use-address-loc-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  margin-top: 8px;
+  padding: 10px 16px;
+  background: none;
+  border: 1.5px dashed var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.18s, color 0.18s, background 0.18s;
+}
+.use-address-loc-btn:hover:not(:disabled) {
+  border-color: var(--blue-dark);
+  color: var(--blue-dark);
+  background: var(--blue-light);
+}
+.use-address-loc-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
 .location-pin-icon { font-size: 1.2rem; }
 
 @keyframes spin { to { transform: rotate(360deg); } }
