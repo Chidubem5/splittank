@@ -147,7 +147,8 @@ export default function App() {
   const [routeLoading, setRouteLoading] = useState(false)
   const [routeError,   setRouteError]   = useState('')
   const [cityRatio,    setCityRatio]    = useState(null) // 0–1 fraction that is city driving; null = not calculated
-  const [showRoute,    setShowRoute]    = useState(false)
+  const [showRoute,    setShowRoute]    = useState(true)
+  const [showManualMiles, setShowManualMiles] = useState(false)
   const [routeSegments,   setRouteSegments]   = useState([])   // [{ state, miles, gasPrice }] — multi-state breakdown
   const [detectingStates, setDetectingStates] = useState(false)
   const [tankGallons,     setTankGallons]     = useState('')   // optional tank size for pit-stop calc
@@ -1179,21 +1180,10 @@ out geom;`,
             </button>
           </div>
 
-          {/* Route calculator — geocodes two addresses and auto-fills miles */}
+          {/* Route calculator — primary input, always shown */}
           <div className="field">
-            <label>
-              Calculate from addresses
-              <button
-                type="button"
-                className="toggle-link"
-                onClick={() => setShowRoute(r => !r)}
-              >
-                {showRoute ? 'hide' : 'show'}
-              </button>
-            </label>
-
-            {showRoute && (
-              <div className="route-fields">
+            <label>From / To</label>
+            <div className="route-fields">
                 <PlaceAutocomplete
                   value={tripFrom}
                   onChange={v => { setTripFrom(v); setCityRatio(null); setRouteSegments([]) }}
@@ -1283,20 +1273,37 @@ out geom;`,
                   )
                 })()}
               </div>
-            )}
           </div>
 
-          {/* Miles input */}
-          <div className="field">
-            <label>Miles driven</label>
-            <input
-              type="number"
-              placeholder="e.g. 150"
-              value={miles}
-              onChange={e => { setMiles(e.target.value); setCityRatio(null) }}
-              min="0"
-            />
-          </div>
+          {/* Miles driven — manual override, hidden when route auto-fills it */}
+          {miles && !showManualMiles ? (
+            <div className="field">
+              <div className="miles-auto-row">
+                <span className="miles-auto-value">{parseFloat(miles).toFixed(1)} miles</span>
+                <button type="button" className="toggle-link" onClick={() => setShowManualMiles(true)}>
+                  edit
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="field">
+              <label>
+                Miles driven
+                {miles && (
+                  <button type="button" className="toggle-link" onClick={() => setShowManualMiles(false)}>
+                    use route distance
+                  </button>
+                )}
+              </label>
+              <input
+                type="number"
+                placeholder="e.g. 150"
+                value={miles}
+                onChange={e => { setMiles(e.target.value); setCityRatio(null) }}
+                min="0"
+              />
+            </div>
+          )}
 
 
           {/* Location detection */}
