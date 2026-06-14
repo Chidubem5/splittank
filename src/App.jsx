@@ -445,10 +445,13 @@ export default function App() {
         const suggestRes = await fetch(
           `https://api.mapbox.com/search/searchbox/v1/suggest` +
           `?q=${encodeURIComponent(q)}&access_token=${token}&session_token=${session}` +
-          `&types=address,poi,place&limit=1&language=en&country=us`
+          `&types=address,poi,place&limit=5&language=en&country=us`
         )
         const suggestData = await suggestRes.json()
-        const suggestion = suggestData.suggestions?.[0]
+        const suggestions = suggestData.suggestions ?? []
+        // Prefer a POI over a generic city/place — e.g. "Aero Orlando" should resolve
+        // to the venue, not the city of Orlando which Mapbox ranks first.
+        const suggestion = suggestions.find(s => s.feature_type === 'poi') ?? suggestions[0]
         if (!suggestion?.mapbox_id) return null
         const retrieveRes = await fetch(
           `https://api.mapbox.com/search/searchbox/v1/retrieve/${suggestion.mapbox_id}` +
