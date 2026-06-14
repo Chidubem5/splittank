@@ -2,9 +2,6 @@ import { useState, useRef, useEffect } from 'react'
 
 const TOKEN = import.meta.env.VITE_MAPBOX_TOKEN
 
-// Mapbox Search Box v1 — much better POI coverage than v5 geocoding.
-// Two-step: suggest() → retrieve() to get coordinates.
-// Session token groups requests for billing efficiency.
 function makeSessionToken() {
   return crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2)
 }
@@ -13,17 +10,17 @@ export default function PlaceAutocomplete({ value, onChange, onSelect, placehold
   const [suggestions, setSuggestions] = useState([])
   const [open,        setOpen]        = useState(false)
   const [activeIdx,   setActiveIdx]   = useState(-1)
-  const debounceRef    = useRef(null)
-  const containerRef   = useRef(null)
-  const sessionRef     = useRef(makeSessionToken())
+  const debounceRef  = useRef(null)
+  const containerRef = useRef(null)
+  const sessionRef   = useRef(makeSessionToken())
 
-  // Close dropdown on outside click
+  // Close dropdown when tapping/clicking outside — pointerdown covers both mouse and touch
   useEffect(() => {
-    function onMouseDown(e) {
+    function onOutside(e) {
       if (containerRef.current && !containerRef.current.contains(e.target)) setOpen(false)
     }
-    document.addEventListener('mousedown', onMouseDown)
-    return () => document.removeEventListener('mousedown', onMouseDown)
+    document.addEventListener('pointerdown', onOutside)
+    return () => document.removeEventListener('pointerdown', onOutside)
   }, [])
 
   function handleChange(e) {
@@ -58,18 +55,19 @@ export default function PlaceAutocomplete({ value, onChange, onSelect, placehold
           setSuggestions([]); return
         }
         const data = await res.json()
-        console.log('[PlaceAutocomplete] suggestions:', data.suggestions?.length ?? 0, 'for', q)
         setSuggestions(data.suggestions ?? [])
         setOpen((data.suggestions?.length ?? 0) > 0)
-      } catch (e) {
-        console.error('[PlaceAutocomplete] fetch failed', e)
+      } catch (err) {
+        console.error('[PlaceAutocomplete] fetch failed', err)
         setSuggestions([])
       }
     }, 280)
   }
 
   async function pick(suggestion) {
-    // Retrieve full details (including coordinates) for the selected suggestion
+    setSuggestions([])
+    setOpen(false)
+    setActiveIdx(-1)
     try {
       const res = await fetch(
         `https://api.mapbox.com/search/searchbox/v1/retrieve/${suggestion.mapbox_id}` +
@@ -83,17 +81,12 @@ export default function PlaceAutocomplete({ value, onChange, onSelect, placehold
         const addr = feature.properties?.full_address ?? suggestion.full_address ?? suggestion.name
         onChange(addr)
         onSelect({ lat, lon })
-        // Reset session token after a completed search
         sessionRef.current = makeSessionToken()
       }
     } catch {
-      // Fallback: just set the name without coords (geocoding chain will handle it)
       onChange(suggestion.full_address ?? suggestion.name)
       onSelect(null)
     }
-    setSuggestions([])
-    setOpen(false)
-    setActiveIdx(-1)
   }
 
   function handleKeyDown(e) {
@@ -104,13 +97,22 @@ export default function PlaceAutocomplete({ value, onChange, onSelect, placehold
     if (e.key === 'Escape') setOpen(false)
   }
 
+  // On mobile, scroll the input into view after the keyboard opens
+  function handleFocus() {
+    setTimeout(() => {
+      containerRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    }, 350)
+  }
+
   return (
     <div className="place-autocomplete" ref={containerRef}>
       <input
         type="text"
+        inputMode="search"
         value={value}
         onChange={handleChange}
         onKeyDown={handleKeyDown}
+        onFocus={handleFocus}
         placeholder={placeholder}
         autoComplete="off"
         spellCheck="false"
@@ -123,7 +125,9 @@ export default function PlaceAutocomplete({ value, onChange, onSelect, placehold
               role="option"
               aria-selected={i === activeIdx}
               className={`place-suggestion-item${i === activeIdx ? ' active' : ''}`}
-              onMouseDown={() => pick(s)}
+              // pointerdown fires before the input loses focus on both mouse and touch,
+              // so the dropdown is still open when we call pick()
+              onPointerDown={e => { e.preventDefault(); pick(s) }}
               onMouseEnter={() => setActiveIdx(i)}
             >
               <span className="place-suggestion-name">{s.name}</span>

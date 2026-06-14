@@ -1649,10 +1649,15 @@ input[type="number"]:disabled { opacity: 0.4; cursor: not-allowed; }
 .place-suggestion-item {
   display: flex;
   flex-direction: column;
-  padding: 9px 13px;
+  padding: 11px 13px;
+  min-height: 44px;
+  justify-content: center;
   cursor: pointer;
   transition: background 0.1s;
   border-bottom: 1px solid rgba(0,0,0,0.05);
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
 }
 .place-suggestion-item:last-child { border-bottom: none; }
 .place-suggestion-item:hover,
