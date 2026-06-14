@@ -446,7 +446,7 @@ export default function App() {
           `https://api.mapbox.com/search/searchbox/v1/suggest` +
           `?q=${encodeURIComponent(q)}&access_token=${token}&session_token=${session}` +
           `&types=address,poi,place&limit=5&language=en&country=us` +
-          `&poi_category=education,entertainment,nightlife,landmark,venue,park,beach,recreation_area,natural_feature`
+          `&poi_category=education,entertainment,nightlife,landmark,venue,park,beach,recreation_area,natural_feature,sports,airport,transit,museum,library,food_and_drink`
         )
         const suggestData = await suggestRes.json()
         const suggestions = suggestData.suggestions ?? []

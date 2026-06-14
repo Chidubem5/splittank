@@ -44,7 +44,7 @@ export default function PlaceAutocomplete({ value, onChange, onSelect, placehold
           `&access_token=${TOKEN}` +
           `&session_token=${sessionRef.current}` +
           `&types=address,poi,place,locality,neighborhood,postcode` +
-          `&poi_category=education,entertainment,nightlife,landmark,venue,park,beach,recreation_area,natural_feature` +
+          `&poi_category=education,entertainment,nightlife,landmark,venue,park,beach,recreation_area,natural_feature,sports,airport,transit,museum,library,food_and_drink` +
           `&proximity=ip` +
           `&limit=5` +
           `&language=en`
