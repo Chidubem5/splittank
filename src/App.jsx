@@ -43,6 +43,7 @@ import { fetchStateGasPrice, fetchAllStatePrices, normalizeCounty, METRO_STATES 
 import { fetchCounties } from './api/counties'             // Census Bureau county list
 import Combobox from './components/Combobox'               // custom typeahead input (replaces <datalist>)
 import PlaceAutocomplete from './components/PlaceAutocomplete'
+import { expandAcronym } from './data/acronyms'
 import RoadHero from './components/RoadHero'               // decorative SVG banner
 import RoadGallery from './components/RoadGallery'         // three illustrated panels
 import PaymentButtons from './components/PaymentButtons'   // Venmo/CashApp/Zelle/Apple Pay buttons
@@ -410,7 +411,8 @@ export default function App() {
   // Level 3: exact query → Census proxy (/api/geocode — server-side, no CORS issues)
   // Level 4: strip house number → Nominatim → Photon
   // Level 5: city + state only → Nominatim → Photon
-  async function geocode(query) {
+  async function geocode(rawQuery) {
+    const query = expandAcronym(rawQuery) ?? rawQuery
     async function tryNominatim(q) {
       try {
         const res  = await fetch(

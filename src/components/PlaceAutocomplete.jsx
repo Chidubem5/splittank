@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import { expandAcronym } from '../data/acronyms'
 
 const TOKEN = import.meta.env.VITE_MAPBOX_TOKEN
 
@@ -38,9 +39,10 @@ export default function PlaceAutocomplete({ value, onChange, onSelect, placehold
     clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(async () => {
       try {
+        const searchQ = expandAcronym(q) ?? q
         const res = await fetch(
           `https://api.mapbox.com/search/searchbox/v1/suggest` +
-          `?q=${encodeURIComponent(q)}` +
+          `?q=${encodeURIComponent(searchQ)}` +
           `&access_token=${TOKEN}` +
           `&session_token=${sessionRef.current}` +
           `&types=address,poi,place,locality,neighborhood,postcode` +
