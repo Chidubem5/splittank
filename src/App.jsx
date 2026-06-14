@@ -434,13 +434,42 @@ export default function App() {
       return null
     }
 
-    // Mapbox — excellent coverage, designed for browser use, CORS-safe.
+    // Mapbox Search Box v1 — same engine as the autocomplete dropdown.
+    // Best for POIs (nightclubs, colleges, landmarks) since v5 geocoding excludes them.
+    async function tryMapboxSearchBox(q) {
+      const token = import.meta.env.VITE_MAPBOX_TOKEN
+      if (!token) return null
+      try {
+        const session = (crypto.randomUUID?.() ?? Math.random().toString(36).slice(2))
+        const suggestRes = await fetch(
+          `https://api.mapbox.com/search/searchbox/v1/suggest` +
+          `?q=${encodeURIComponent(q)}&access_token=${token}&session_token=${session}` +
+          `&types=address,poi,place&limit=1&language=en&country=us`
+        )
+        const suggestData = await suggestRes.json()
+        const suggestion = suggestData.suggestions?.[0]
+        if (!suggestion?.mapbox_id) return null
+        const retrieveRes = await fetch(
+          `https://api.mapbox.com/search/searchbox/v1/retrieve/${suggestion.mapbox_id}` +
+          `?access_token=${token}&session_token=${session}`
+        )
+        const retrieveData = await retrieveRes.json()
+        const feature = retrieveData.features?.[0]
+        if (!feature) return null
+        const [lon, lat] = feature.geometry.coordinates
+        if (typeof lat !== 'number' || typeof lon !== 'number') return null
+        return { lat, lon }
+      } catch {}
+      return null
+    }
+
+    // Mapbox v5 geocoding — addresses and places (not POIs).
     async function tryMapbox(q) {
       const token = import.meta.env.VITE_MAPBOX_TOKEN
       if (!token) return null
       try {
         const res  = await fetch(
-          `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json?access_token=${token}&limit=1&types=address,place`
+          `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json?access_token=${token}&limit=1&types=address,place,poi&country=us`
         )
         const data = await res.json()
         const coords = data?.features?.[0]?.center
@@ -461,32 +490,44 @@ export default function App() {
       return null
     }
 
-    // Level 1: exact input via OSM
+    // Validate result is within the contiguous US / Alaska / Hawaii bounding box.
+    // Filters out wrong geocoding hits (e.g. "Bijou" resolving to a European city).
+    function isUSCoord(c) {
+      if (!c) return false
+      const lat = parseFloat(c.lat), lon = parseFloat(c.lon)
+      return lat >= 17 && lat <= 72 && lon >= -180 && lon <= -65
+    }
+
+    // Level 1: Mapbox Search Box v1 — handles POIs, nightclubs, colleges, venues
+    const r0 = await tryMapboxSearchBox(query)
+    if (r0 && isUSCoord(r0)) return r0
+
+    // Level 2: OSM Nominatim / Photon
     const r1 = await tryNominatim(query) ?? await tryPhoton(query)
-    if (r1) return r1
+    if (r1 && isUSCoord(r1)) return r1
 
-    // Level 2: Mapbox (commercial coverage, handles new streets and ambiguous queries)
+    // Level 3: Mapbox v5 (addresses + places + POIs, US-filtered)
     const r2 = await tryMapbox(query)
-    if (r2) return r2
+    if (r2 && isUSCoord(r2)) return r2
 
-    // Level 3: Census proxy (authoritative for every US street)
+    // Level 4: Census proxy (authoritative for every US street)
     const r3 = await tryCensus(query)
-    if (r3) return r3
+    if (r3 && isUSCoord(r3)) return r3
 
-    // Level 4: strip leading house number ("2631 Clapham Ln, City, ST" → "Clapham Ln, City, ST")
+    // Level 5: strip leading house number ("2631 Clapham Ln, City, ST" → "Clapham Ln, City, ST")
     const withoutNumber = query.replace(/^\d+\s+/, '')
     if (withoutNumber !== query) {
       const r4 = await tryNominatim(withoutNumber) ?? await tryPhoton(withoutNumber)
-      if (r4) return r4
+      if (r4 && isUSCoord(r4)) return r4
     }
 
-    // Level 5: city + state only — extract last two comma-separated parts
+    // Level 6: city + state only — extract last two comma-separated parts
     const parts = query.split(',').map(s => s.trim()).filter(Boolean)
     if (parts.length >= 2) {
       const cityState = parts.slice(-2).join(', ')
       if (cityState !== query) {
         const r5 = await tryNominatim(cityState) ?? await tryPhoton(cityState)
-        if (r5) return r5
+        if (r5 && isUSCoord(r5)) return r5
       }
     }
 
