@@ -44,7 +44,6 @@ export default function PlaceAutocomplete({ value, onChange, onSelect, placehold
           `&access_token=${TOKEN}` +
           `&session_token=${sessionRef.current}` +
           `&types=address,poi,place,locality,neighborhood,postcode` +
-          `&poi_category=education,entertainment,nightlife,landmark,venue,park,beach,recreation_area,natural_feature,sports,airport,transit,museum,library,food_and_drink` +
           `&proximity=ip` +
           `&limit=5` +
           `&language=en`
@@ -55,8 +54,14 @@ export default function PlaceAutocomplete({ value, onChange, onSelect, placehold
           setSuggestions([]); return
         }
         const data = await res.json()
-        setSuggestions(data.suggestions ?? [])
-        setOpen((data.suggestions?.length ?? 0) > 0)
+        // Filter out vacation rental / unclassified listing noise.
+        // Real places (beaches, hospitals, clubs) always have at least one poi_category.
+        // Rental listings (Airbnb, VRBO, etc.) come back with poi_category: [] and maki: 'marker'.
+        const suggestions = (data.suggestions ?? []).filter(s =>
+          s.poi_category === null || s.poi_category === undefined || s.poi_category.length > 0
+        )
+        setSuggestions(suggestions)
+        setOpen(suggestions.length > 0)
       } catch (err) {
         console.error('[PlaceAutocomplete] fetch failed', err)
         setSuggestions([])
