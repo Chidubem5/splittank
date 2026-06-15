@@ -304,12 +304,19 @@ export default function App() {
     setTimeout(() => setCopyLinkToast(false), 3000)
   }
 
-  function shareResult() {
+  async function shareResult() {
     if (!liveResult) return
-    navigator.share({
-      title: 'Split Tank',
-      url: buildShareURL(),
-    }).catch(() => {})
+    const shareUrl = buildShareURL()
+    try {
+      const res = await fetch('/preview-coin.jpg')
+      const blob = await res.blob()
+      const file = new File([blob], 'splittank.jpg', { type: 'image/jpeg' })
+      if (navigator.canShare?.({ files: [file] })) {
+        await navigator.share({ title: 'Split Tank', url: shareUrl, files: [file] })
+        return
+      }
+    } catch { /* fall through to URL-only share */ }
+    navigator.share({ title: 'Split Tank', url: shareUrl }).catch(() => {})
   }
 
   // Save the current result to the signed-in user's trip history (max 5 trips).
