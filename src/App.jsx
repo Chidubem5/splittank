@@ -308,7 +308,7 @@ export default function App() {
     if (!liveResult) return
     const shareUrl = buildShareURL()
     try {
-      const res = await fetch('/preview-coin.jpg')
+      const res = await fetch('/preview.jpg')
       const blob = await res.blob()
       const file = new File([blob], 'splittank.jpg', { type: 'image/jpeg' })
       if (navigator.canShare?.({ files: [file] })) {
