@@ -183,8 +183,9 @@ export default function App() {
   // useRef stores a reference to the dropdown DOM element.
   // Unlike useState, changing a ref does NOT trigger a re-render.
   // We use it here to detect clicks outside the menu.
-  const menuRef   = useRef(null)
-  const resultRef = useRef(null)   // ref to the result card for auto-scroll
+  const menuRef        = useRef(null)
+  const resultRef      = useRef(null)
+  const previewBlobRef = useRef(null)
 
   // Selected friend as driver (pre-fills car + payment handles)
   const [driverFriend, setDriverFriend] = useState(null)
@@ -203,6 +204,12 @@ export default function App() {
   const [showTrips,     setShowTrips]     = useState(true)
 
   // ── Side effects ──────────────────────────────────────────────────────────
+
+  // Pre-load share image so navigator.share() can be called synchronously
+  // (iOS invalidates the user gesture if we await inside the share handler).
+  useEffect(() => {
+    fetch('/preview.jpg').then(r => r.blob()).then(b => { previewBlobRef.current = b }).catch(() => {})
+  }, [])
 
   // Close the header dropdown on outside click.
   useEffect(() => {
@@ -304,21 +311,21 @@ export default function App() {
     setTimeout(() => setCopyLinkToast(false), 3000)
   }
 
-  async function shareResult() {
+  function shareResult() {
     if (!liveResult) return
     const shareUrl = buildShareURL()
-    try {
-      const res = await fetch('/preview.jpg')
-      const blob = await res.blob()
+    // Use pre-loaded blob so this stays synchronous — iOS voids the user
+    // gesture if we await inside the handler, causing canShare to fail.
+    const blob = previewBlobRef.current
+    if (blob && navigator.canShare) {
       const file = new File([blob], 'splittank.jpg', { type: 'image/jpeg' })
-      if (navigator.canShare?.({ files: [file] })) {
-        // Share image as photo attachment + URL as plain text.
-        // Using text: instead of url: prevents iOS from generating a link
-        // preview card (which shows gray when Apple's cache is stale).
-        await navigator.share({ files: [file], text: shareUrl })
+      if (navigator.canShare({ files: [file] })) {
+        navigator.share({ files: [file], text: shareUrl }).catch(() => {
+          navigator.share({ title: 'Split Tank', url: shareUrl }).catch(() => {})
+        })
         return
       }
-    } catch { /* fall through */ }
+    }
     navigator.share({ title: 'Split Tank', url: shareUrl }).catch(() => {})
   }
 
