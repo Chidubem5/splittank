@@ -312,10 +312,13 @@ export default function App() {
       const blob = await res.blob()
       const file = new File([blob], 'splittank.jpg', { type: 'image/jpeg' })
       if (navigator.canShare?.({ files: [file] })) {
-        await navigator.share({ title: 'Split Tank', url: shareUrl, files: [file] })
+        // Share image as photo attachment + URL as plain text.
+        // Using text: instead of url: prevents iOS from generating a link
+        // preview card (which shows gray when Apple's cache is stale).
+        await navigator.share({ files: [file], text: shareUrl })
         return
       }
-    } catch { /* fall through to URL-only share */ }
+    } catch { /* fall through */ }
     navigator.share({ title: 'Split Tank', url: shareUrl }).catch(() => {})
   }
 
