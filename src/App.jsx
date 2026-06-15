@@ -308,7 +308,6 @@ export default function App() {
     if (!liveResult) return
     navigator.share({
       title: 'Split Tank',
-      text: `Gas split: each person owes $${liveResult.perPerson.toFixed(2)} for a ${Math.round(liveResult.miles)}-mile trip`,
       url: buildShareURL(),
     }).catch(() => {})
   }
