@@ -441,8 +441,7 @@ const PANELS = [
   },
 ]
 
-// RoadGallery renders below the main calculator in App.jsx,
-// above the <footer> and above the auth modals.
+// RoadGallery renders below the main calculator in App.jsx, above the <footer>.
 export default function RoadGallery() {
   return (
     <section className="road-gallery">

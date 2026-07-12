@@ -45,13 +45,6 @@ function ArrowIcon() {
   )
 }
 
-// Returns true if the string looks like a phone number (not an email).
-// Used to decide whether a zelleContact should open SMS or just be copied.
-function isPhone(str) {
-  const digits = str.replace(/\D/g, '')
-  return digits.length >= 7 && /^[\d\s\-().+]+$/.test(str.trim())
-}
-
 export default function PaymentButtons({ amount, venmoHandle, cashAppHandle, zelleContact, appleContact }) {
   const [toast, setToast]           = useState(null)
   const [lastClicked, setLastClicked] = useState(null) // tracks which button was last tapped for fallback hint

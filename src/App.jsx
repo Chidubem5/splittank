@@ -121,7 +121,6 @@ export default function App() {
   const [routeLoading, setRouteLoading] = useState(false)
   const [routeError,   setRouteError]   = useState('')
   const [cityRatio,    setCityRatio]    = useState(null) // 0–1 fraction that is city driving; null = not calculated
-  const [showRoute,    setShowRoute]    = useState(true)
   const [showManualMiles, setShowManualMiles] = useState(false)
   const [routeSegments,   setRouteSegments]   = useState([])   // [{ state, miles, gasPrice }] — multi-state breakdown
   const [detectingStates, setDetectingStates] = useState(false)
