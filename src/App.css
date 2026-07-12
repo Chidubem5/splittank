@@ -1174,27 +1174,6 @@ input[type="number"]:disabled { opacity: 0.4; cursor: not-allowed; }
   .reset-btn        { min-height: 48px; padding: 0 16px; }
   .share-btn        { min-height: 50px; }
 
-  /* ── Modals — slide up from bottom as a sheet ── */
-  .modal-overlay {
-    align-items: flex-end;
-    padding: 0;
-  }
-  .modal-box {
-    width: 100%;
-    max-width: 100%;
-    border-radius: 20px 20px 0 0;
-    max-height: 92vh;
-    padding: 28px 20px 24px;
-    padding-bottom: max(28px, calc(20px + env(safe-area-inset-bottom)));
-    animation: slideUp 0.28s cubic-bezier(0.32, 0.72, 0, 1);
-  }
-  .modal-box--wide { max-width: 100%; }
-  .modal-save-btn,
-  .modal-signout-btn { min-height: 48px; }
-
-  /* ── Auth provider buttons ── */
-  .auth-provider-btn { min-height: 52px; }
-
   /* ── Gallery ── */
   .road-gallery { padding: 20px 12px 28px; }
   .road-gallery-inner { gap: 12px; }
@@ -1205,12 +1184,6 @@ input[type="number"]:disabled { opacity: 0.4; cursor: not-allowed; }
 
   /* ── Footer ── */
   .app-footer { padding-bottom: calc(14px + env(safe-area-inset-bottom)); }
-}
-
-/* ── Slide-up animation for mobile modal sheet ── */
-@keyframes slideUp {
-  from { transform: translateY(100%); }
-  to   { transform: translateY(0); }
 }
 
 /* ── Very small phones (≤ 390px) ── */

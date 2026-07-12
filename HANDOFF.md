@@ -65,7 +65,7 @@ middleware.js                  — Vercel Edge Middleware: serves link-preview b
                                    index the real app (see comments in the file)
 
 public/
-  favicon.svg, logo-*.png, preview.jpg, preview-v4.png — icons + the two OG preview images
+  logo-*.png, preview.jpg, preview-v4.png            — icons + the two OG preview images
                                                            actually referenced (middleware.js
                                                            and index.html respectively)
 ```
@@ -196,3 +196,6 @@ add/edit → trigger a manual redeploy for changes to take effect.
 - **Test coverage:** Vitest covers the pure helpers in `src/utils/` and `normalizeCounty`; the
   route/toll/geocoding logic in `App.jsx` itself is still untested (would need mocking several
   external APIs).
+- **`prop-types` looks unused but is required:** no source file imports it directly, but
+  `react-simple-maps` declares it as a peer dependency and `require()`s it at runtime — removing
+  it from `package.json` breaks the gas/electricity heat maps.
