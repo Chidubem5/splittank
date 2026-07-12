@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { buildSmsUrl } from '../utils/sms'
 
 function VenmoIcon() {
   return (
@@ -81,7 +82,7 @@ export default function PaymentButtons({ amount, venmoHandle, cashAppHandle, zel
   // On iPhone this lets the passenger send an Apple Pay payment or just notify.
   function openSMS(phone) {
     const body = `Here's my gas share: $${amount} — sent via Split Tank (splittank.com)`
-    window.location.href = `sms:${encodeURIComponent(phone)}?body=${encodeURIComponent(body)}`
+    window.location.href = buildSmsUrl(phone, body)
     fire('Opening Messages — tap send when ready', 'sms')
   }
 

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { ComposableMap, Geographies, Geography, ZoomableGroup, Marker } from 'react-simple-maps'
 import { STATE_ELECTRICITY_RATES } from '../data/electricityRates'
+import { useNightMode } from '../hooks/useNightMode'
 
 const GEO_URL = 'https://cdn.jsdelivr.net/npm/us-atlas@3/states-10m.json'
 
@@ -137,8 +138,8 @@ export default function ElectricityRateMap({ selectedState, electricityRate }) {
 
   const isMobile = window.innerWidth < 640
 
-  const hour   = new Date().getHours()
-  const isDark = hour >= 19 || hour < 6
+  // Shared with the rest of the site via useNightMode (src/hooks).
+  const isDark = useNightMode()
 
   const enteredRate  = electricityRate ? parseFloat(electricityRate) : NaN
   const displayRate  = !isNaN(enteredRate) ? enteredRate : rates[selectedState]

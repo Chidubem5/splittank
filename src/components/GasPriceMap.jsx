@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { ComposableMap, Geographies, Geography, ZoomableGroup, Marker } from 'react-simple-maps'
 import { STATE_GAS_PRICES } from '../data/gasPrices'
+import { useNightMode } from '../hooks/useNightMode'
 
 const GEO_URL = 'https://cdn.jsdelivr.net/npm/us-atlas@3/states-10m.json'
 
@@ -105,8 +106,8 @@ export default function GasPriceMap({ selectedState, selectedPrice, mapPrices })
   const isMobile = window.innerWidth < 640
 
   // Day mode (6 am – 7 pm) = light background. Evening/night = dark.
-  const hour   = new Date().getHours()
-  const isDark = hour >= 19 || hour < 6
+  // Shared with the rest of the site via useNightMode (src/hooks).
+  const isDark = useNightMode()
 
   const livePrice    = selectedPrice ? parseFloat(selectedPrice) : NaN
   const displayPrice = !isNaN(livePrice) ? livePrice : (mapPrices?.[selectedState] ?? STATE_GAS_PRICES[selectedState])

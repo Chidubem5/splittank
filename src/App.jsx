@@ -1,7 +1,8 @@
 // App.jsx — Root component: the entire Split Tank calculator
 //
 // This file owns all calculator state and wires every feature together.
-// Everything the user sees and interacts with (except auth modals) lives here.
+// Everything the user sees and interacts with lives here. No sign-in is
+// required or offered — all state lives in this component and in the URL.
 //
 // ── WHERE DATA COMES FROM ─────────────────────────────────────────────────────
 //  api/fuelEconomy.js   → year/make/model/trim dropdowns + MPG figures
@@ -13,8 +14,6 @@
 //                          Applied to data/tollRates.js base rates in estimateTolls()
 //  data/tollRates.js    → per-state toll event cost (base year: 2024 calibration)
 //  api/counties.js      → Census Bureau county list for the county dropdown
-//  contexts/AuthContext.jsx → currentUser, userProfile (saved car+payment),
-//                             friends list, saveProfile() — all via Firebase
 //
 // ── HOW RESULTS ARE COMPUTED ──────────────────────────────────────────────────
 //  1. miles (from route or manual input)
@@ -29,10 +28,7 @@
 //   ├─ RoadHero          (decorative banner SVG)
 //   ├─ Combobox ×4       (year / make / model / trim inputs)
 //   ├─ PaymentButtons    (Venmo / Cash App / Zelle / Apple Pay deep links)
-//   ├─ RoadGallery       (three illustrated panels at page bottom)
-//   ├─ AuthModal         (sign-in overlay — shown when showAuth=true)
-//   ├─ ProfileModal      (car + payment save — shown when showProfile=true)
-//   └─ FriendsPanel      (friends list + driver picker — shown when showFriends=true)
+//   └─ RoadGallery       (three illustrated panels at page bottom)
 
 import { useState, useEffect, useRef, useMemo, lazy, Suspense } from 'react'
 import { getYears, getMakes, getModels, getOptions, getVehicleMPG, estimateTankSize } from './api/fuelEconomy'
@@ -47,46 +43,21 @@ import { expandAcronym } from './data/acronyms'
 import RoadHero from './components/RoadHero'               // decorative SVG banner
 import RoadGallery from './components/RoadGallery'         // three illustrated panels
 import PaymentButtons from './components/PaymentButtons'   // Venmo/CashApp/Zelle/Apple Pay buttons
+import { buildSmsUrl } from './utils/sms'
+import { isEmail, buildMailtoUrl } from './utils/contact'
+import { computeSplit } from './utils/computeSplit'
+import { getStatesAtPoints } from './utils/stateLookup'
+import { useNightMode } from './hooks/useNightMode'
+import { mostCommonTrimIdx } from './utils/trimPopularity'
 // Lazily loaded — pulled in only when the user first opens them
 const GasPriceMap        = lazy(() => import('./components/GasPriceMap'))
 const ElectricityRateMap = lazy(() => import('./components/ElectricityRateMap'))
-const AuthModal    = lazy(() => import('./components/AuthModal'))
-const ProfileModal = lazy(() => import('./components/ProfileModal'))
-const FriendsPanel = lazy(() => import('./components/FriendsPanel'))
-import { useAuth } from './contexts/AuthContext'           // Firebase auth state + Firestore profile
 import './App.css'
 
-// Scores a trim option string to estimate how commonly it sells in the US.
-// Higher = more likely to be the volume trim. Ties go to the earlier index.
-// Logic: 4-cyl outsells 6/8; FWD/RWD outsells AWD; automatics dominate;
-// hybrids/EVs/performance variants are niche relative to base powertrain.
-function trimPopularityScore(text) {
-  const t = text.toLowerCase()
-  let s = 0
-  if (/\b4-?cyl\b|\bi-?4\b/.test(t))              s += 4
-  if (/\b3-?cyl\b|\bi-?3\b/.test(t))              s += 3
-  if (/\b6-?cyl\b|\bv-?6\b/.test(t))              s -= 1
-  if (/\b8-?cyl\b|\bv-?8\b/.test(t))              s -= 3
-  if (/\b(10|12)-?cyl\b|\bv-?1[02]\b/.test(t))   s -= 5
-  if (/\bawd\b|\b4wd\b|\b4x4\b|\ball.?wheel/.test(t)) s -= 2
-  if (/\bmanual\b|\bm\/t\b/.test(t))              s -= 2
-  if (/\bphev\b|\bplug.?in\b/.test(t))            s -= 1
-  if (/\bhybrid\b/.test(t))                       s -= 1
-  if (/\belectric\b|\bbev\b/.test(t))             s -= 2
-  return s
-}
-
-function mostCommonTrimIdx(opts) {
-  if (opts.length <= 1) return 0
-  let bestIdx = 0, bestScore = trimPopularityScore(opts[0].text)
-  for (let i = 1; i < opts.length; i++) {
-    const s = trimPopularityScore(opts[i].text)
-    if (s > bestScore) { bestScore = s; bestIdx = i }
-  }
-  return bestIdx
-}
-
 export default function App() {
+
+  // Auto night theme (7pm–6am) — see src/hooks/useNightMode.js
+  useNightMode()
 
   // ── Trip state ────────────────────────────────────────────────────────────
   const [miles,         setMiles]         = useState('')    // miles driven (one way)
@@ -133,8 +104,8 @@ export default function App() {
   const [appleContacts,  setAppleContacts]  = useState([''])
 
   // ── Passenger phone numbers for payment requests ──────────────────────────
-  const [passengerPhones, setPassengerPhones] = useState([''])
-  const [sentPhones,      setSentPhones]      = useState(new Set())
+  const [passengerContacts, setPassengerContacts] = useState([''])  // phone or email, per row
+  const [sentContacts,      setSentContacts]      = useState(new Set())
 
 // ── Tolls ─────────────────────────────────────────────────────────────────
   const [tolls,            setTolls]            = useState('')
@@ -169,26 +140,13 @@ export default function App() {
   const [locationDenied,       setLocationDenied]       = useState(false) // true when blocked by settings
   const [showManualState,      setShowManualState]      = useState(false)
 
-  // ── Auth + modal state ────────────────────────────────────────────────────
-  // useAuth() reads from AuthContext — the sign-in state managed in AuthContext.jsx
-  const { currentUser, userProfile, friends, isEnabled, saveProfile } = useAuth()
-  const [showAuth,    setShowAuth]    = useState(false)
-  const [showProfile, setShowProfile] = useState(false)
-  const [showFriends, setShowFriends] = useState(false)
-  const [menuOpen,    setMenuOpen]    = useState(false)
+  // ── Map + UI state ────────────────────────────────────────────────────────
   const [showMap,     setShowMap]     = useState(false)
   const [mapMode,     setMapMode]     = useState('gas')  // 'gas' | 'electric'
   const [mapPrices,   setMapPrices]   = useState(null)   // live EIA prices for all 50 states
 
-  // useRef stores a reference to the dropdown DOM element.
-  // Unlike useState, changing a ref does NOT trigger a re-render.
-  // We use it here to detect clicks outside the menu.
-  const menuRef        = useRef(null)
   const resultRef      = useRef(null)
   const previewBlobRef = useRef(null)
-
-  // Selected friend as driver (pre-fills car + payment handles)
-  const [driverFriend, setDriverFriend] = useState(null)
 
   // ── EV mode ───────────────────────────────────────────────────────────────
   const [isEV,           setIsEV]           = useState(false)
@@ -197,11 +155,13 @@ export default function App() {
 
   // ── Custom split percentages (one per passenger) ──────────────────────────
   const [customShares, setCustomShares] = useState([])
+  // Which passenger row the "Send your share" button below represents, in
+  // custom-split mode — there's no per-user login, so the viewer has to say
+  // which passenger they are before we can show them the right amount.
+  const [viewerShareIdx, setViewerShareIdx] = useState(0)
 
   // ── UI feedback state ─────────────────────────────────────────────────────
   const [copyLinkToast, setCopyLinkToast] = useState(false)
-  const [tripSaved,     setTripSaved]     = useState(false)
-  const [showTrips,     setShowTrips]     = useState(true)
 
   // ── Side effects ──────────────────────────────────────────────────────────
 
@@ -211,15 +171,6 @@ export default function App() {
     fetch('/preview.jpg').then(r => r.blob()).then(b => { previewBlobRef.current = b }).catch(() => {})
   }, [])
 
-  // Close the header dropdown on outside click.
-  useEffect(() => {
-    function handleClick(e) {
-      if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false)
-    }
-    document.addEventListener('mousedown', handleClick)
-    return () => document.removeEventListener('mousedown', handleClick)
-  }, [])
-
   // Restore calculator state from URL query params on mount.
   // Enables shareable links — e.g. splittank.com?m=150&st=Illinois&p=3
   useEffect(() => {
@@ -227,7 +178,7 @@ export default function App() {
     if (p.get('m'))  setMiles(p.get('m'))
     if (p.get('st')) setState(p.get('st'))
     if (p.get('co')) setCounty(p.get('co'))
-    if (p.get('p'))  setPassengers(Math.max(1, parseInt(p.get('p'), 10) || 1))
+    if (p.get('p'))  setPassengers(Math.max(0, parseInt(p.get('p'), 10) || 0))
     const sm = p.get('sm')
     if (sm === 'cover' || sm === 'custom') setSplitMode(sm)
     if (p.get('rt') === '1') setRoundTrip(true)
@@ -239,6 +190,14 @@ export default function App() {
     } else {
       if (p.get('gp')) { setGasPrice(p.get('gp')); setCustomGas(true) }
     }
+    // Custom split percentages — only meaningful alongside sm=custom above.
+    if (sm === 'custom' && p.get('cs')) {
+      setCustomShares(p.get('cs').split(',').map(s => s.trim()))
+    }
+    // Driver's payment handles — without these, a passenger who opens a shared
+    // link has no way to actually pay, which defeats the point of sharing it.
+    if (p.get('v'))  setVenmoHandles([p.get('v')])
+    if (p.get('ca')) setCashAppHandles([p.get('ca')])
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // When splitMode switches to 'custom' or passengers count changes in custom mode,
@@ -252,35 +211,7 @@ export default function App() {
     })
   }, [passengers, splitMode])
 
-  // Pre-fill car and payment info from a friend's saved profile.
-  function applyDriverFriend(friend) {
-    setDriverFriend(friend)
-    if (friend.car) {
-      setMpgData({
-        city:     friend.car.mpgCity     ?? null,
-        highway:  friend.car.mpgHighway  ?? null,
-        combined: friend.car.mpgCombined ?? null,
-      })
-      setShowManual(false)
-      setManualMpg('')
-    }
-    // Pre-fill all payment handles from their profile
-    setVenmoHandles([friend.payment?.venmoHandle   || ''])
-    setCashAppHandles([friend.payment?.cashAppHandle || ''])
-    setZelleContacts([friend.payment?.zelleContact   || ''])
-    setAppleContacts([friend.payment?.appleContact   || ''])
-  }
-
-  // Clear the friend driver selection and reset car/payment fields
-  function clearDriverFriend() {
-    setDriverFriend(null)
-    setMpgData(null)
-    setYear(''); setMake(''); setModel('')
-    setVenmoHandles(['']); setCashAppHandles([''])
-    setZelleContacts(['']); setAppleContacts([''])
-  }
-
-  // ── Share + trip history helpers ──────────────────────────────────────────
+  // ── Share helpers ──────────────────────────────────────────────────────────
 
   // Build a URL that encodes all current calculator inputs as query params.
   function buildShareURL() {
@@ -297,8 +228,22 @@ export default function App() {
     }
     if (passengers !== 1) p.set('p', String(passengers))
     if (splitMode !== 'even') p.set('sm', splitMode)
+    if (splitMode === 'custom' && customShares.length) {
+      p.set('cs', customShares.slice(0, passengers).join(','))
+    }
     if (roundTrip) p.set('rt', '1')
     if (tolls) p.set('tl', tolls)
+    // Include the driver's payment handles so a passenger opening this link
+    // can actually pay — without these the link is just a number with no
+    // way to act on it.
+    const venmo   = venmoHandles.find(h => h.trim())
+    const cashApp = cashAppHandles.find(h => h.trim())
+    if (venmo)   p.set('v', venmo)
+    if (cashApp) p.set('ca', cashApp)
+    // The headline per-person (or solo-trip) amount, so the link-preview bot
+    // in middleware.js can show the real result instead of generic copy —
+    // see buildPreviewCopy() there for how this gets used.
+    if (liveResult) p.set('pp', liveResult.perPerson.toFixed(2))
     const str = p.toString()
     return str
       ? `${window.location.origin}${window.location.pathname}?${str}`
@@ -329,48 +274,6 @@ export default function App() {
     navigator.share({ title: 'Split Tank', url: shareUrl }).catch(() => {})
   }
 
-  // Save the current result to the signed-in user's trip history (max 5 trips).
-  async function saveCurrentTrip() {
-    if (!currentUser || !liveResult) return
-    const trip = {
-      id: Date.now(),
-      ts: Date.now(),
-      miles: parseFloat(miles),
-      state: state || '',
-      gasPrice: liveResult.gp,
-      passengers,
-      splitMode,
-      totalCost: liveResult.totalCost,
-      perPerson: liveResult.perPerson,
-      mpg: liveResult.mpg,
-      roundTrip,
-      isEV,
-    }
-    const existing = userProfile?.trips ?? []
-    await saveProfile({ trips: [trip, ...existing].slice(0, 5) })
-    setTripSaved(true)
-    setTimeout(() => setTripSaved(false), 3000)
-  }
-
-  // Restore calculator inputs from a saved trip.
-  function loadTrip(trip) {
-    setMiles(String(trip.miles))
-    if (trip.state) setState(trip.state)
-    setPassengers(trip.passengers)
-    setSplitMode(trip.splitMode)
-    setRoundTrip(trip.roundTrip ?? false)
-    if (trip.isEV) {
-      setIsEV(true)
-      setMilesPerKwh(String(trip.mpg))
-      setElectricityRate(String(trip.gasPrice))
-    } else {
-      setIsEV(false)
-      setGasPrice(String(trip.gasPrice))
-      setCustomGas(true)
-    }
-    window.scrollTo({ top: 0, behavior: 'smooth' })
-  }
-
   // ── Contact array helpers ─────────────────────────────────────────────────
   function addContact(setter)         { setter(prev => [...prev, '']) }
   function removeContact(setter, idx) { setter(prev => prev.filter((_, i) => i !== idx)) }
@@ -378,13 +281,21 @@ export default function App() {
     setter(prev => prev.map((v, i) => i === idx ? val : v))
   }
 
-  // Build and open a pre-filled SMS to a passenger asking them to pay their share.
-  // Picks the best available payment method: Venmo > Cash App > generic.
+  // Build and open a pre-filled SMS or email to a passenger asking them to pay
+  // their share — routed by what the driver typed, same "phone or email"
+  // pattern the Zelle field already uses. Picks the best available payment
+  // method: Venmo > Cash App > generic.
   // Includes trip context (miles, car) so passengers know exactly what they're paying for.
-  function sendPaymentRequest(phone, result) {
+  // `idx` is this passenger's row index in the "Request from passengers" list —
+  // in custom-split mode each passenger owes a different amount (customAmounts[idx]),
+  // so it must NOT fall back to result.perPerson, which is only passenger 0's share.
+  function sendPaymentRequest(contact, result, idx) {
     const venmo    = venmoHandles.find(h => h.trim())
     const cashApp  = cashAppHandles.find(h => h.trim())
-    const amount   = result.perPerson.toFixed(2)
+    const owed     = result.splitMode === 'custom'
+      ? (result.customAmounts?.[idx] ?? result.perPerson)
+      : result.perPerson
+    const amount   = owed.toFixed(2)
     const tripInfo = `${Math.round(result.miles)}-mile trip, ${result.mpg} ${result.isEV ? 'mi/kWh' : 'mpg'}`
     let msg
     if (venmo) {
@@ -394,32 +305,12 @@ export default function App() {
     } else {
       msg = `Hey! Your gas share for our ${tripInfo} is $${amount}. Pay me back when you get a chance — calculated on Split Tank (splittank.com)`
     }
-    window.location.href = `sms:${phone}?body=${encodeURIComponent(msg)}`
+    window.location.href = isEmail(contact)
+      ? buildMailtoUrl(contact, `Your gas share: $${amount}`, msg)
+      : buildSmsUrl(contact, msg)
   }
 
   // ── Route calculator ──────────────────────────────────────────────────────
-
-  // Encodes a [lon, lat] coordinate array into Google's encoded polyline format.
-  // Samples to ≤100 points so the payload stays small for long routes.
-  function encodePolyline(coords) {
-    const step = Math.max(1, Math.floor(coords.length / 100))
-    const sampled = coords.filter((_, i) => i % step === 0)
-    if (sampled[sampled.length - 1] !== coords[coords.length - 1])
-      sampled.push(coords[coords.length - 1])
-
-    let out = '', prevLat = 0, prevLon = 0
-    for (const [lon, lat] of sampled) {
-      const latE5 = Math.round(lat * 1e5)
-      const lonE5 = Math.round(lon * 1e5)
-      for (let val of [latE5 - prevLat, lonE5 - prevLon]) {
-        val = val < 0 ? ~(val << 1) : val << 1
-        while (val >= 0x20) { out += String.fromCharCode((0x20 | (val & 0x1f)) + 63); val >>= 5 }
-        out += String.fromCharCode(val + 63)
-      }
-      prevLat = latE5; prevLon = lonE5
-    }
-    return out
-  }
 
   // Geocodes a single query string with five levels of fallback.
   // Level 1: exact query → Nominatim → Photon
@@ -665,7 +556,7 @@ out geom;`,
     return total > 0 ? parseFloat(total.toFixed(2)) : 0
   }
 
-  // Sample points along the OSRM route, reverse-geocode each to a US state, fetch
+  // Sample points along the OSRM route, resolve each to a US state, fetch
   // per-state live gas prices, and return weighted-average price across the whole route.
   async function detectRouteStates(coords, totalMiles) {
     if (!coords?.length || coords.length < 2) return null
@@ -677,19 +568,27 @@ out geom;`,
       coords[Math.min(Math.round(i * step), coords.length - 1)]
     )
 
-    // zoom=5 = state-level reverse geocode — cheap and fast.
-    // Parallel fetch is intentional: this is a single user-triggered action, not a loop.
-    const stateNames = await Promise.all(
-      samples.map(([lon, lat]) =>
-        fetch(
-          `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&zoom=5`,
-          { headers: { 'Accept-Language': 'en' } }
+    // Point-in-state lookup against the US states topology, done fully
+    // client-side — no per-point network calls, so no risk of hitting
+    // Nominatim's 1 req/sec rate limit with up to 14 parallel samples.
+    // Falls back to Nominatim reverse-geocoding if the topology can't be
+    // loaded (e.g. the CDN is unreachable).
+    let stateNames
+    try {
+      stateNames = await getStatesAtPoints(samples)
+    } catch {
+      stateNames = await Promise.all(
+        samples.map(([lon, lat]) =>
+          fetch(
+            `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&zoom=5`,
+            { headers: { 'Accept-Language': 'en' } }
+          )
+            .then(r => r.json())
+            .then(d => d?.address?.state ?? null)
+            .catch(() => null)
         )
-          .then(r => r.json())
-          .then(d => d?.address?.state ?? null)
-          .catch(() => null)
       )
-    )
+    }
 
     // Collapse consecutive same-state runs into segments with a sample count.
     const rawSegs = []
@@ -1051,10 +950,14 @@ out geom;`,
   // EV off automatically re-fetches the state gas price.
   useEffect(() => {
     if (!state || customGas || isEV) return // eslint-disable-line react-hooks/exhaustive-deps
+    // Guards against a stale response overwriting a newer one: if state/county
+    // changes again before this fetch resolves, `cancelled` skips applying it.
+    let cancelled = false
     setLivePriceDate(null)
     setLivePriceLabel(null)
     setLivePriceSource(null)
     fetchStateGasPrice(state, county || null).then(result => {
+      if (cancelled) return
       if (result) {
         setGasPrice(result.price.toFixed(2))
         setLivePriceDate(formatEIADate(result.period))
@@ -1064,6 +967,7 @@ out geom;`,
         setGasPrice(STATE_GAS_PRICES[state]?.toFixed(2) ?? '')
       }
     })
+    return () => { cancelled = true }
   }, [state, county, isEV]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Re-estimate tolls when vehicle type changes (trucks pay different rates)
@@ -1123,26 +1027,16 @@ out geom;`,
     const tollAmount = (parseFloat(tolls) || 0) * (roundTrip ? 2 : 1)
     const totalCost  = gasCost + tollAmount
 
-    // ── Split calculations ────────────────────────────────────────────────
-    let perPerson, customAmounts, driverPct, driverAmount, totalSharePct
-    if (splitMode === 'custom' && customShares.length > 0) {
-      const shares    = customShares.slice(0, passengers).map(s => parseFloat(s) || 0)
-      totalSharePct   = shares.reduce((a, b) => a + b, 0)
-      customAmounts   = shares.map(s => totalCost * (s / 100))
-      driverPct       = Math.max(0, 100 - totalSharePct)
-      driverAmount    = totalCost * (driverPct / 100)
-      perPerson       = customAmounts[0] ?? 0
-    } else {
-      perPerson = splitMode === 'even'
-        ? totalCost / (passengers + 1)
-        : totalCost / passengers
-    }
+    const split = computeSplit({ totalCost, passengers, splitMode, customShares })
 
     return {
-      gallons, gasCost, tollAmount, totalCost, perPerson,
+      gallons, gasCost, tollAmount, totalCost, perPerson: split.perPerson,
       passengers, splitMode, miles: effectiveMiles, mpg, gp: effectiveGp,
       cityRatio, roundTrip, isEV,
-      ...(splitMode === 'custom' ? { customAmounts, driverPct, driverAmount, totalSharePct } : {}),
+      ...(splitMode === 'custom' && passengers > 0 ? {
+        customAmounts: split.customAmounts, driverPct: split.driverPct,
+        driverAmount: split.driverAmount, totalSharePct: split.totalSharePct,
+      } : {}),
     }
   })()
 
@@ -1161,45 +1055,6 @@ out geom;`,
             <h1>Split Tank</h1>
             <p>Figure out what everyone owes</p>
           </div>
-
-          {/* Auth controls — only rendered if Firebase is configured (isEnabled) */}
-          {isEnabled && (
-            <div className="header-auth" ref={menuRef}>
-              {currentUser ? (
-                <>
-                  {/* User is signed in: show avatar + name button that opens a dropdown */}
-                  <button className="user-menu-btn" onClick={() => setMenuOpen(o => !o)}>
-                    {currentUser.photoURL
-                      ? <img src={currentUser.photoURL} alt="" className="user-avatar-img" />
-                      : <span className="user-avatar-initial">
-                          {(currentUser.displayName || 'U')[0].toUpperCase()}
-                        </span>
-                    }
-                    <span className="user-display-name">
-                      {currentUser.displayName?.split(' ')[0] || 'Account'}
-                    </span>
-                    <span className="chevron">{menuOpen ? '▲' : '▼'}</span>
-                  </button>
-
-                  {menuOpen && (
-                    <div className="user-dropdown">
-                      <button onClick={() => { setShowProfile(true); setMenuOpen(false) }}>
-                        My Profile &amp; Car
-                      </button>
-                      <button onClick={() => { setShowFriends(true); setMenuOpen(false) }}>
-                        Friends ({friends.length})
-                      </button>
-                    </div>
-                  )}
-                </>
-              ) : (
-                // User is signed out: show sign-in button
-                <button className="sign-in-btn" onClick={() => setShowAuth(true)}>
-                  Sign in
-                </button>
-              )}
-            </div>
-          )}
         </div>
       </header>
 
@@ -1207,72 +1062,6 @@ out geom;`,
       <RoadHero />
 
       <main className="app-main">
-
-        {/* ── FRIEND DRIVER PICKER ─────────────────────────────────────────
-            Only shown when the user is logged in AND has at least one friend.
-            && short-circuits: if the left side is false, the right side never renders. */}
-        {isEnabled && currentUser && friends.length > 0 && (
-          <section className="card driver-picker-card">
-            <span className="section-title">Who's driving?</span>
-            <p className="driver-picker-hint">
-              Select a friend to auto-fill their car and payment info.
-            </p>
-            <div className="driver-friend-list">
-              {friends.map(f => (
-                <button
-                  key={f.id}
-                  className={`driver-friend-btn${driverFriend?.id === f.id ? ' selected' : ''}`}
-                  onClick={() => driverFriend?.id === f.id ? clearDriverFriend() : applyDriverFriend(f)}
-                  disabled={!f.car}   // can't select a friend with no car saved
-                  title={!f.car ? `${f.displayName} hasn't saved their car yet` : ''}
-                >
-                  <span className="driver-friend-name">{f.displayName}</span>
-                  {f.car
-                    ? <span className="driver-friend-car">{f.car.label} · {f.car.mpgCombined} mpg</span>
-                    : <span className="driver-friend-car muted">No car saved</span>
-                  }
-                </button>
-              ))}
-            </div>
-            {driverFriend && (
-              <button className="clear-driver-btn" onClick={clearDriverFriend}>
-                Clear — enter car manually
-              </button>
-            )}
-          </section>
-        )}
-
-        {/* ── RECENT TRIPS (signed-in users only) ────────────────────────────── */}
-        {isEnabled && currentUser && userProfile?.trips?.length > 0 && (
-          <section className="card recent-trips-card">
-            <div className="section-header">
-              <span className="section-title">Recent Trips</span>
-              <button className="toggle-link" onClick={() => setShowTrips(t => !t)}>
-                {showTrips ? 'hide' : 'show'}
-              </button>
-            </div>
-            {showTrips && (
-              <div className="trip-history-list">
-                {userProfile.trips.map(trip => (
-                  <button key={trip.id} className="trip-history-item" onClick={() => loadTrip(trip)}>
-                    <div className="trip-history-main">
-                      <span className="trip-history-route">
-                        {trip.miles} mi{trip.roundTrip ? ' (RT)' : ''}{trip.state ? ` · ${trip.state}` : ''}
-                      </span>
-                      <span className="trip-history-amount">${trip.perPerson.toFixed(2)}/person</span>
-                    </div>
-                    <div className="trip-history-meta">
-                      {trip.isEV ? `${trip.mpg} mi/kWh` : `${trip.mpg} mpg`} · {trip.passengers}p · {trip.splitMode === 'even' ? 'even' : trip.splitMode === 'cover' ? 'cover' : 'custom'}
-                      <span className="trip-history-date">
-                        {new Date(trip.ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                      </span>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
-          </section>
-        )}
 
         {/* ── TRIP DETAILS ──────────────────────────────────────────────────── */}
         <section className="card">
@@ -1605,18 +1394,9 @@ out geom;`,
         <section className="card">
           <span className="section-title">{isEV ? 'The Vehicle (Efficiency)' : 'The Car (Mileage)'}</span>
 
-          {/* Friend's car summary — shown when a friend is pre-selected as driver */}
-          {driverFriend?.car && (
-            <div className="friend-car-badge">
-              <span className="friend-car-badge-name">{driverFriend.displayName}'s car</span>
-              <span className="friend-car-badge-label">{driverFriend.car.label}</span>
-            </div>
-          )}
-
           {/* Vehicle lookup — always shown for both EV and gas modes.
               Selecting an EV trim auto-switches to EV mode and fills mi/kWh from EPA data. */}
-          {!driverFriend && (
-            <>
+          <>
               {isEV && !mpgData?.isEV && (
                 <p className="county-note" style={{marginBottom: 8}}>
                   Select your EV below to auto-fill efficiency from EPA data, or enter mi/kWh manually.
@@ -1677,10 +1457,9 @@ out geom;`,
                 </div>
               )}
             </>
-          )}
 
-          {!driverFriend && loadingMpg && <p className="loading-text">Loading vehicle data...</p>}
-          {!driverFriend && carError && !loadingMpg && <p className="car-error">{carError}</p>}
+          {loadingMpg && <p className="loading-text">Loading vehicle data...</p>}
+          {carError && !loadingMpg && <p className="car-error">{carError}</p>}
 
           {/* EV mode: EPA badges + mi/kWh input */}
           {isEV ? (
@@ -1858,8 +1637,8 @@ out geom;`,
             <div className="counter-row">
               <button
                 className="counter-btn"
-                onClick={() => setPassengers(p => Math.max(1, p - 1))}
-                disabled={passengers <= 1}
+                onClick={() => setPassengers(p => Math.max(0, p - 1))}
+                disabled={passengers <= 0}
               >
                 −
               </button>
@@ -1871,52 +1650,58 @@ out geom;`,
                 +
               </button>
             </div>
+            {passengers === 0 && (
+              <p className="county-note">Solo trip — no one to split with, this is just your cost.</p>
+            )}
           </div>
 
-          <div className="field">
-            <label>How should gas be split?</label>
-            <div className="split-options">
-              <label className={`split-option${splitMode === 'even' ? ' selected' : ''}`}>
-                <input
-                  type="radio"
-                  name="split"
-                  checked={splitMode === 'even'}
-                  onChange={() => setSplitMode('even')}
-                />
-                <div className="split-option-text">
-                  <strong>Split evenly</strong>
-                  <p>Everyone including the driver pays an equal share</p>
-                </div>
-              </label>
-              <label className={`split-option${splitMode === 'cover' ? ' selected' : ''}`}>
-                <input
-                  type="radio"
-                  name="split"
-                  checked={splitMode === 'cover'}
-                  onChange={() => setSplitMode('cover')}
-                />
-                <div className="split-option-text">
-                  <strong>Passengers cover the driver</strong>
-                  <p>Passengers split the full gas cost between themselves</p>
-                </div>
-              </label>
-              <label className={`split-option${splitMode === 'custom' ? ' selected' : ''}`}>
-                <input
-                  type="radio"
-                  name="split"
-                  checked={splitMode === 'custom'}
-                  onChange={() => setSplitMode('custom')}
-                />
-                <div className="split-option-text">
-                  <strong>Custom percentages</strong>
-                  <p>Each passenger pays a different share — set the % below</p>
-                </div>
-              </label>
+          {/* Split mode only makes sense with at least one passenger to split with */}
+          {passengers > 0 && (
+            <div className="field">
+              <label>How should gas be split?</label>
+              <div className="split-options">
+                <label className={`split-option${splitMode === 'even' ? ' selected' : ''}`}>
+                  <input
+                    type="radio"
+                    name="split"
+                    checked={splitMode === 'even'}
+                    onChange={() => setSplitMode('even')}
+                  />
+                  <div className="split-option-text">
+                    <strong>Split evenly</strong>
+                    <p>Everyone including the driver pays an equal share</p>
+                  </div>
+                </label>
+                <label className={`split-option${splitMode === 'cover' ? ' selected' : ''}`}>
+                  <input
+                    type="radio"
+                    name="split"
+                    checked={splitMode === 'cover'}
+                    onChange={() => setSplitMode('cover')}
+                  />
+                  <div className="split-option-text">
+                    <strong>Passengers cover the driver</strong>
+                    <p>Passengers split the full gas cost between themselves</p>
+                  </div>
+                </label>
+                <label className={`split-option${splitMode === 'custom' ? ' selected' : ''}`}>
+                  <input
+                    type="radio"
+                    name="split"
+                    checked={splitMode === 'custom'}
+                    onChange={() => setSplitMode('custom')}
+                  />
+                  <div className="split-option-text">
+                    <strong>Custom percentages</strong>
+                    <p>Each passenger pays a different share — set the % below</p>
+                  </div>
+                </label>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Custom share percentage inputs — shown only in custom mode */}
-          {splitMode === 'custom' && (
+          {passengers > 0 && splitMode === 'custom' && (
             <div className="custom-shares-section">
               {Array.from({ length: passengers }).map((_, i) => (
                 <div key={i} className="custom-share-row">
@@ -2008,10 +1793,14 @@ out geom;`,
               ) : (
                 /* Big per-person number — the main result */
                 <div className="per-person-box">
-                  <span className="per-person-label">Each passenger owes</span>
+                  <span className="per-person-label">
+                    {liveResult.passengers === 0 ? 'Your trip cost' : 'Each passenger owes'}
+                  </span>
                   <span className="per-person-amount">${liveResult.perPerson.toFixed(2)}</span>
                   <p className="per-person-note">
-                    {liveResult.splitMode === 'even'
+                    {liveResult.passengers === 0
+                      ? 'Solo trip — no one to split with'
+                      : liveResult.splitMode === 'even'
                       ? `${liveResult.passengers + 1} people splitting evenly`
                       : `${liveResult.passengers} passenger${liveResult.passengers > 1 ? 's' : ''} covering the driver`
                     }
@@ -2028,11 +1817,6 @@ out geom;`,
                 <button className="copy-link-btn" onClick={copyLink}>
                   {copyLinkToast ? '✓ Copied!' : '🔗 Copy link'}
                 </button>
-                {isEnabled && currentUser && (
-                  <button className="save-trip-btn" onClick={saveCurrentTrip}>
-                    {tripSaved ? '✓ Saved' : '💾 Save trip'}
-                  </button>
-                )}
               </div>
             </>
           ) : (
@@ -2045,17 +1829,9 @@ out geom;`,
         {/* ── PAYMENT INFO ─────────────────────────────────────────────────── */}
         <section className="card">
           <span className="section-title">Driver payment info</span>
-          {driverFriend
-            ? <p className="payment-info-hint">
-                Pre-filled from {driverFriend.displayName}'s profile. You can still edit below.
-              </p>
-            : <p className="payment-info-hint">
-                Optional — fill in the driver's handles so passengers get a direct pay link.
-                {isEnabled && !currentUser && (
-                  <> <button className="inline-link" onClick={() => setShowAuth(true)}>Sign in</button> to save yours.</>
-                )}
-              </p>
-          }
+          <p className="payment-info-hint">
+            Optional — fill in the driver's handles so passengers get a direct pay link.
+          </p>
 
           {/* Payment handle inputs — each method supports multiple contacts */}
           <div className="payment-handles">
@@ -2139,15 +1915,36 @@ out geom;`,
             </div>
           </div>
 
-          {/* Send your share — appears once the calculator has a result */}
+          {/* Send your share — appears once the calculator has a result.
+              In custom-split mode, passengers owe different amounts, so the
+              viewer picks which passenger row is theirs before we show a total. */}
           {liveResult ? (
-            <PaymentButtons
-              amount={liveResult.perPerson.toFixed(2)}
-              venmoHandle={venmoHandles.find(h => h.trim()) || ''}
-              cashAppHandle={cashAppHandles.find(h => h.trim()) || ''}
-              zelleContact={zelleContacts.find(c => c.trim()) || ''}
-              appleContact={appleContacts.find(c => c.trim()) || ''}
-            />
+            <>
+              {liveResult.splitMode === 'custom' && liveResult.customAmounts?.length > 1 && (
+                <div className="field viewer-share-picker">
+                  <label>Which passenger are you?</label>
+                  <select
+                    value={Math.min(viewerShareIdx, liveResult.customAmounts.length - 1)}
+                    onChange={e => setViewerShareIdx(Number(e.target.value))}
+                  >
+                    {liveResult.customAmounts.map((amt, i) => (
+                      <option key={i} value={i}>Passenger {i + 1} — ${amt.toFixed(2)}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              <PaymentButtons
+                amount={(
+                  liveResult.splitMode === 'custom'
+                    ? (liveResult.customAmounts?.[Math.min(viewerShareIdx, liveResult.customAmounts.length - 1)] ?? liveResult.perPerson)
+                    : liveResult.perPerson
+                ).toFixed(2)}
+                venmoHandle={venmoHandles.find(h => h.trim()) || ''}
+                cashAppHandle={cashAppHandles.find(h => h.trim()) || ''}
+                zelleContact={zelleContacts.find(c => c.trim()) || ''}
+                appleContact={appleContacts.find(c => c.trim()) || ''}
+              />
+            </>
           ) : (
             <p className="payment-pending-hint">
               Fill in the trip details above to unlock the send button.
@@ -2155,45 +1952,54 @@ out geom;`,
           )}
 
           {/* ── REQUEST FROM PASSENGERS ──────────────────────────────────── */}
-          {liveResult && (
+          {liveResult && liveResult.passengers > 0 && (
             <div className="request-section">
               <p className="payment-heading">Request from passengers</p>
               <p className="payment-info-hint" style={{ marginBottom: 10 }}>
-                Enter each passenger's phone number and tap Send — they'll get
-                a text with the amount and a direct payment link.
+                Enter each passenger's phone number or email and tap Send —
+                they'll get a text or email with the amount and a direct payment link.
               </p>
-              {passengerPhones.map((phone, i) => {
-                const wasSent = sentPhones.has(i)
+              {passengerContacts.map((contact, i) => {
+                const wasSent = sentContacts.has(i)
+                const viaEmail = isEmail(contact)
+                // In custom-split mode each passenger owes a different amount —
+                // show which one this row will send so it's clear before tapping Send.
+                const rowAmount = liveResult.splitMode === 'custom'
+                  ? (liveResult.customAmounts?.[i] ?? liveResult.perPerson)
+                  : liveResult.perPerson
                 return (
                   <div className="request-row" key={i}>
+                    {liveResult.splitMode === 'custom' && (
+                      <span className="request-row-amount">${rowAmount.toFixed(2)}</span>
+                    )}
                     <input
-                      type="tel"
-                      placeholder="Phone number"
-                      value={phone}
+                      type="text"
+                      placeholder="Phone number or email"
+                      value={contact}
                       onChange={e => {
-                        updateContact(setPassengerPhones, i, e.target.value)
-                        setSentPhones(prev => { const n = new Set(prev); n.delete(i); return n })
+                        updateContact(setPassengerContacts, i, e.target.value)
+                        setSentContacts(prev => { const n = new Set(prev); n.delete(i); return n })
                       }}
                       className="request-phone-input"
                     />
                     <button
                       type="button"
                       className={`request-send-btn${wasSent ? ' sent' : ''}`}
-                      disabled={!phone.trim()}
+                      disabled={!contact.trim()}
                       onClick={() => {
-                        sendPaymentRequest(phone.trim(), liveResult)
-                        setSentPhones(prev => new Set(prev).add(i))
+                        sendPaymentRequest(contact.trim(), liveResult, i)
+                        setSentContacts(prev => new Set(prev).add(i))
                       }}
                     >
-                      {wasSent ? 'Sent ✓' : 'Send'}
+                      {wasSent ? 'Sent ✓' : viaEmail ? 'Email' : 'Text'}
                     </button>
-                    {passengerPhones.length > 1 && (
+                    {passengerContacts.length > 1 && (
                       <button
                         type="button"
                         className="remove-contact-btn"
                         onClick={() => {
-                          removeContact(setPassengerPhones, i)
-                          setSentPhones(prev => { const n = new Set(prev); n.delete(i); return n })
+                          removeContact(setPassengerContacts, i)
+                          setSentContacts(prev => { const n = new Set(prev); n.delete(i); return n })
                         }}
                       >
                         ✕
@@ -2205,7 +2011,7 @@ out geom;`,
               <button
                 type="button"
                 className="add-contact-btn"
-                onClick={() => addContact(setPassengerPhones)}
+                onClick={() => addContact(setPassengerContacts)}
               >
                 + add passenger
               </button>
@@ -2273,18 +2079,6 @@ out geom;`,
       <footer className="app-footer">
         {isEV ? 'Electricity rate entered manually.' : 'Gas prices sourced from AAA (daily) with EIA as fallback.'}
       </footer>
-
-      {/* Modals — lazily loaded, each renders as an overlay when triggered. */}
-      <Suspense fallback={null}>
-        {showAuth    && <AuthModal    onClose={() => setShowAuth(false)} />}
-        {showProfile && <ProfileModal onClose={() => setShowProfile(false)} />}
-        {showFriends && (
-          <FriendsPanel
-            onSelectDriver={applyDriverFriend}
-            onClose={() => setShowFriends(false)}
-          />
-        )}
-      </Suspense>
     </div>
   )
 }
