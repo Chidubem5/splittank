@@ -77,10 +77,10 @@ middleware.js                  — Vercel Edge Middleware: serves link-preview b
                                    index the real app (see comments in the file)
 
 public/
-  logo-*.png, preview.jpg, preview-v4.png            — icons + the two OG preview images
-                                                           actually referenced (middleware.js
-                                                           and index.html respectively)
-```
+  favicon.svg / favicon.ico / favicon-32.png, apple-touch-icon.png,
+  logo-192/512.png, maskable-192/512.png   — the "S Road" logo in every size
+  share-card.jpg                         — the link preview (coin photo + lettering), used by
+                                           index.html, middleware.js and the Share button
 
 ---
 

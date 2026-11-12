@@ -168,7 +168,7 @@ export default function App() {
   // Pre-load share image so navigator.share() can be called synchronously
   // (iOS invalidates the user gesture if we await inside the share handler).
   useEffect(() => {
-    fetch('/preview.jpg').then(r => r.blob()).then(b => { previewBlobRef.current = b }).catch(() => {})
+    fetch('/share-card.jpg').then(r => r.blob()).then(b => { previewBlobRef.current = b }).catch(() => {})
   }, [])
 
   // Restore calculator state from URL query params on mount.
