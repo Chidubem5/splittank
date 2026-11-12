@@ -52,6 +52,7 @@ src/
     RoadHero.jsx            — child-like SVG road scene (car with four riders, trees,
                                utility poles); night variant via the `night` prop
     RoadGallery.jsx          — three serif "journal lines" at the bottom
+    SRoadLogo.jsx            — the "S Road" logo mark (header); same art as public/favicon.svg
     PaymentButtons.jsx        — Venmo / Cash App / Zelle / Apple Pay deep-link buttons
     Combobox.jsx               — typeahead input used for year/make/model/trim
     PlaceAutocomplete.jsx      — Mapbox-backed address autocomplete for the route fields

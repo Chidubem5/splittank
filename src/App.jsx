@@ -41,6 +41,7 @@ import Combobox from './components/Combobox'               // custom typeahead i
 import PlaceAutocomplete from './components/PlaceAutocomplete'
 import { expandAcronym } from './data/acronyms'
 import RoadHero from './components/RoadHero'               // decorative SVG banner
+import SRoadLogo from './components/SRoadLogo'             // the "S Road" logo mark
 import RoadGallery from './components/RoadGallery'         // three illustrated panels
 import PaymentButtons from './components/PaymentButtons'   // Venmo/CashApp/Zelle/Apple Pay buttons
 import { buildSmsUrl } from './utils/sms'
@@ -1068,7 +1069,10 @@ out geom;`,
       <header className="app-header">
         <div className="header-inner">
           <div>
-            <h1>Split Tank</h1>
+            <div className="brand">
+              <SRoadLogo size={36} className="brand-mark" />
+              <h1>Split Tank</h1>
+            </div>
             <p>Figure out what everyone owes</p>
           </div>
         </div>
