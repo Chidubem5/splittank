@@ -18,6 +18,8 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { Analytics } from '@vercel/analytics/react'
+import '@fontsource/chivo/400.css'             // Chivo: the type pairing dealt by the taste skill,
+import '@fontsource/chivo/500.css'             // self-hosted so it passes the CSP's font-src 'self'
 import './index.css'                               // global reset + CSS custom properties (--blue, --yellow, etc.)
 import App from './App.jsx'                        // the entire app lives inside this one component
 

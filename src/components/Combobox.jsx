@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 
-export default function Combobox({ options, value, onChange, placeholder, disabled }) {
+export default function Combobox({ id, options, value, onChange, placeholder, disabled }) {
   const [open, setOpen]           = useState(false)
   const [highlighted, setHighlighted] = useState(-1)
   const containerRef  = useRef(null)
@@ -65,6 +65,7 @@ export default function Combobox({ options, value, onChange, placeholder, disabl
   return (
     <div className="combobox" ref={containerRef}>
       <input
+        id={id}
         type="text"
         value={value}
         onChange={handleChange}

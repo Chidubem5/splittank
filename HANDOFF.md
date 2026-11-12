@@ -39,8 +39,8 @@ src/
     acronyms.js               — place-name expansion for address autocomplete (e.g. "UCF")
 
   components/
-    RoadHero.jsx            — hand-coded SVG road scene at the top
-    RoadGallery.jsx          — three illustrated panels at the bottom
+    RoadHero.jsx / RoadGallery.jsx — cartoon illustrations, NOT rendered since the
+                              highway-signage redesign (kept in the repo, unused)
     PaymentButtons.jsx        — Venmo / Cash App / Zelle / Apple Pay deep-link buttons
     Combobox.jsx               — typeahead input used for year/make/model/trim
     PlaceAutocomplete.jsx      — Mapbox-backed address autocomplete for the route fields
@@ -71,6 +71,22 @@ public/
 ```
 
 ---
+
+## Visual design
+
+"Stickers and stencil", built with the design-taste-frontend skill (`.agents/skills/`),
+calculator first. The skill dealt the card-pastels palette (off-white ground, one hot
+pink accent `#d0106f`), the Chivo typeface, the `round` radius (10/16/24px), pill
+buttons and the "stack" mark. The result is a die-cut pink sticker, and small stencil
+arrows point from each step to the next; everything else stays neutral. Night mode is a soft
+charcoal (`#1c1c1e` ground, `#28282c` cards), not pure black. Tokens and
+notes are at the top of `src/App.css`.
+
+Chivo is self-hosted through `@fontsource/chivo` because the CSP in `vercel.json` only
+allows `font-src 'self'`. Don't switch it to a Google Fonts link, which would be blocked
+in production. The skill's gate (`node .agents/skills/design-taste-frontend/scripts/gate.mjs
+dist/index.html --root dist`) ends OPEN: its remaining FAILs are marketing-site structure
+(full-screen sections, a nav bar, photographs per section) that was skipped on purpose.
 
 ## Removed: sign-in / Firebase
 
