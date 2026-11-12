@@ -18,6 +18,13 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { Analytics } from '@vercel/analytics/react'
+// Self-hosted fonts (bundled by Vite): the CSP in vercel.json only allows
+// font-src 'self', so Google Fonts would be blocked. Latin subsets only.
+import '@fontsource/instrument-serif/latin-400.css'        // display: headings, big amounts
+import '@fontsource/instrument-serif/latin-400-italic.css'
+import '@fontsource/instrument-sans/latin-400.css'         // UI text
+import '@fontsource/instrument-sans/latin-500.css'
+import '@fontsource/instrument-sans/latin-600.css'
 import './index.css'                               // global reset + CSS custom properties (--blue, --yellow, etc.)
 import App from './App.jsx'                        // the entire app lives inside this one component
 

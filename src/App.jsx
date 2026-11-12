@@ -57,7 +57,7 @@ import './App.css'
 export default function App() {
 
   // Auto night theme (7pm–6am) — see src/hooks/useNightMode.js
-  useNightMode()
+  const isNight = useNightMode()
 
   // ── Trip state ────────────────────────────────────────────────────────────
   const [miles,         setMiles]         = useState('')    // miles driven (one way)
@@ -1044,6 +1044,23 @@ out geom;`,
     if (liveResult) resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
   }, [liveResult !== null]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Trip title shown above the road scene, e.g. "Orlando to Atlanta".
+  // Uses the first comma part of each address ("Orlando, FL, USA" → "Orlando").
+  const placeName = s => s.split(',')[0].trim()
+  const tripHeadline = placeName(tripFrom) && placeName(tripTo)
+    ? { from: placeName(tripFrom), to: placeName(tripTo) }
+    : null
+
+  const tripSummary = (() => {
+    if (!liveResult) return 'Enter a route below to see who owes what.'
+    const mi = `${Math.round(liveResult.miles)} miles`
+    const n = liveResult.passengers
+    if (n === 0) return `${mi} · solo trip · $${liveResult.totalCost.toFixed(2)}`
+    if (liveResult.splitMode === 'custom') return `${mi} · ${n + 1} people · $${liveResult.totalCost.toFixed(2)} total`
+    if (liveResult.splitMode === 'cover') return `${mi} · ${n} passenger${n > 1 ? 's' : ''} · $${liveResult.perPerson.toFixed(2)} each`
+    return `${mi} · ${n + 1} people · $${liveResult.perPerson.toFixed(2)} each`
+  })()
+
   return (
     <div className="app">
 
@@ -1057,10 +1074,28 @@ out geom;`,
         </div>
       </header>
 
-      {/* Decorative road scene banner */}
-      <RoadHero />
+      {/* ── TRIP TITLE ─────────────────────────────────────────────────────── */}
+      <section className="trip-hero">
+        <div className="trip-hero-inner">
+          <div className="trip-hero-heading">
+            <span className="trip-hero-kicker">{tripHeadline ? 'This trip' : 'Road trip?'}</span>
+            <h2 className="trip-hero-title">
+              {tripHeadline
+                ? <>{tripHeadline.from} <em>to</em> {tripHeadline.to}</>
+                : <>Split the gas, <em>fairly</em></>}
+            </h2>
+          </div>
+          <p className="trip-hero-sub">{tripSummary}</p>
+        </div>
+      </section>
+
+      {/* Decorative road scene banner — switches to a night drive 7pm–6am */}
+      <RoadHero night={isNight} />
 
       <main className="app-main">
+       {/* Steps 1–3 (inputs). Step markers and the connecting route line are
+           drawn in CSS (counters on .card), so the sections stay plain. */}
+       <div className="step-col">
 
         {/* ── TRIP DETAILS ──────────────────────────────────────────────────── */}
         <section className="card">
@@ -1082,13 +1117,13 @@ out geom;`,
               className={`fuel-toggle-btn${!isEV ? ' active' : ''}`}
               onClick={() => setIsEV(false)}
             >
-              ⛽ Gas
+              Gas
             </button>
             <button
               className={`fuel-toggle-btn${isEV ? ' active' : ''}`}
               onClick={() => setIsEV(true)}
             >
-              ⚡ Electric
+              Electric
             </button>
           </div>
 
@@ -1119,7 +1154,7 @@ out geom;`,
                 {routeError && <p className="route-error">{routeError}</p>}
                 {cityRatio !== null && (
                   <p className="route-split">
-                    📍 {Math.round((1 - cityRatio) * 100)}% highway · {Math.round(cityRatio * 100)}% city
+                    {Math.round((1 - cityRatio) * 100)}% highway · {Math.round(cityRatio * 100)}% city
                     {mpgData?.city && mpgData?.highway && !showManual && ' — using split MPG for accuracy'}
                   </p>
                 )}
@@ -1166,7 +1201,7 @@ out geom;`,
                       </div>
                       {tankIsEstimate && range && (
                         <p className="route-states-note">
-                          ⛽ Refuel tips based on ~{tank} gal estimated tank — enter your actual tank size below for accuracy.
+                          Refuel tips based on ~{tank} gal estimated tank — enter your actual tank size below for accuracy.
                         </p>
                       )}
                       {routeSegments.map((seg, i) => (
@@ -1177,7 +1212,7 @@ out geom;`,
                             ${seg.gasPrice?.toFixed(2) ?? '—'}/gal
                           </span>
                           {pitStopIdx.has(i) && (
-                            <span className="pit-stop-tag">⛽ Fill up here</span>
+                            <span className="pit-stop-tag">Fill up here</span>
                           )}
                         </div>
                       ))}
@@ -1225,7 +1260,7 @@ out geom;`,
             {/* If location was already detected, show a chip instead of the button */}
             {detectedLocation ? (
               <div className="location-chip">
-                <span className="location-chip-icon">📍</span>
+                <span className="location-chip-icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M12 21s-6-5.6-6-11a6 6 0 0 1 12 0c0 5.4-6 11-6 11z" /><circle cx="12" cy="10" r="2.2" /></svg></span>
                 <span className="location-chip-text">
                   {/* .filter(Boolean) removes falsy values (null, undefined, '') before joining */}
                   {[detectedLocation.city, detectedLocation.county, detectedLocation.state]
@@ -1249,7 +1284,7 @@ out geom;`,
                 >
                   {detectingLocation
                     ? <><span className="location-spinner" /> Detecting your location…</>
-                    : <><span className="location-pin-icon">📍</span> Use My Location</>
+                    : <><span className="location-pin-icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M12 21s-6-5.6-6-11a6 6 0 0 1 12 0c0 5.4-6 11-6 11z" /><circle cx="12" cy="10" r="2.2" /></svg></span> Use My Location</>
                   }
                 </button>
 
@@ -1313,7 +1348,7 @@ out geom;`,
               </select>
               {/* Show which metro area data source is being used */}
               {county && livePriceLabel && (
-                <p className="county-note">📍 Using {livePriceLabel} prices</p>
+                <p className="county-note">Using {livePriceLabel} prices</p>
               )}
             </div>
           )}
@@ -1350,7 +1385,7 @@ out geom;`,
 
               {(county || detectedLocation?.county) && !customGas && !livePriceLabel && (
                 <p className="county-note">
-                  📍 {county || detectedLocation.county} — using {state} weekly average.
+                  {county || detectedLocation.county} — using {state} weekly average.
                   Tap the price to enter your local pump price.
                 </p>
               )}
@@ -1597,9 +1632,9 @@ out geom;`,
           </p>
           <div className="fuel-toggle-row">
             {[
-              { value: '2AxlesAuto', label: '🚗 Car / SUV' },
-              { value: '3Axles',     label: '🚚 Truck / Van' },
-              { value: '5Axles',     label: '🚛 Semi / 18-Wheeler' },
+              { value: '2AxlesAuto', label: 'Car / SUV' },
+              { value: '3Axles',     label: 'Truck / Van' },
+              { value: '5Axles',     label: 'Semi / 18-wheeler' },
             ].map(opt => (
               <button
                 key={opt.value}
@@ -1626,6 +1661,11 @@ out geom;`,
             />
           </div>
         </section>
+
+       </div>
+
+       {/* Steps 4–5 (result + payment). Sits beside steps 1–3 on wide screens. */}
+       <div className="step-col">
 
         {/* ── THE TOTAL ─────────────────────────────────────────────────────── */}
         <section className="card result-card" ref={resultRef}>
@@ -1810,11 +1850,11 @@ out geom;`,
               <div className="result-actions">
                 {navigator.share && (
                   <button className="share-btn" onClick={shareResult}>
-                    📤 Share
+                    Share
                   </button>
                 )}
-                <button className="copy-link-btn" onClick={copyLink}>
-                  {copyLinkToast ? '✓ Copied!' : '🔗 Copy link'}
+                <button className={`copy-link-btn${copyLinkToast ? ' copied' : ''}`} onClick={copyLink} aria-live="polite">
+                  {copyLinkToast ? '✓ Link copied' : 'Copy link'}
                 </button>
               </div>
             </>
@@ -2034,17 +2074,44 @@ out geom;`,
           )}
 
         </section>
+
+        {/* End of the route line — the destination */}
+        {liveResult && (
+          <p className="route-end">
+            {tripHeadline ? `${tripHeadline.to}.` : 'Arrived.'} Everyone’s square.
+          </p>
+        )}
+       </div>
       </main>
 
       <div className="gas-map-toggle-section">
         <div className="gas-map-toggle-header">
+          {/* A full-width card so it's obvious the map can be opened */}
           <button
             className="gas-map-toggle-btn"
             onClick={() => setShowMap(s => !s)}
             aria-expanded={showMap}
           >
-            <span>{mapMode === 'electric' ? 'Electricity Rate Map' : 'Gas Price Heat Map'}</span>
-            <span className="gas-map-toggle-icon" aria-hidden="true">{showMap ? '▲' : '▼'}</span>
+            <span className="map-cta-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round">
+                <path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2z" />
+                <path d="M9 4v14M15 6v14" />
+              </svg>
+            </span>
+            <span className="map-cta-text">
+              <span className="map-cta-title">
+                {mapMode === 'electric' ? 'See electricity rates by state' : 'See live gas prices by state'}
+              </span>
+              <span className="map-cta-sub">
+                {showMap
+                  ? 'Tap a state to see its price'
+                  : mapMode === 'electric' ? 'Interactive map · EIA residential rates' : 'Interactive map · daily AAA averages'}
+              </span>
+            </span>
+            <span className="map-cta-action">
+              {showMap ? 'Hide map' : 'Show map'}
+              <span className="gas-map-toggle-icon" aria-hidden="true">{showMap ? '▴' : '▾'}</span>
+            </span>
           </button>
           {showMap && (
             <div className="map-mode-toggle">

@@ -18,6 +18,16 @@ There is no sign-in, no account system, and no server-side storage of user data 
 
 ---
 
+## Design ("Route")
+
+Journal-style page: warm paper, Instrument Serif headings over Instrument Sans UI
+(self-hosted via @fontsource — the CSP only allows `font-src 'self'`). Each section
+is a numbered stop on a blue route line drawn in CSS (counters on `.card`).
+Colour roles: **blue** = brand and the route itself; **green** = the accent for
+every control (selected, on, primary, done); **yellow** = money and fuel (the total's
+marker, the amount underline). Tokens live at the top of `App.css`, with a dark set
+for night mode (7pm–6am).
+
 ## File structure
 
 ```
@@ -39,8 +49,9 @@ src/
     acronyms.js               — place-name expansion for address autocomplete (e.g. "UCF")
 
   components/
-    RoadHero.jsx            — hand-coded SVG road scene at the top
-    RoadGallery.jsx          — three illustrated panels at the bottom
+    RoadHero.jsx            — child-like SVG road scene (car with four riders, trees,
+                               utility poles); night variant via the `night` prop
+    RoadGallery.jsx          — three serif "journal lines" at the bottom
     PaymentButtons.jsx        — Venmo / Cash App / Zelle / Apple Pay deep-link buttons
     Combobox.jsx               — typeahead input used for year/make/model/trim
     PlaceAutocomplete.jsx      — Mapbox-backed address autocomplete for the route fields
