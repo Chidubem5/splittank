@@ -2,7 +2,7 @@
 // Social / link-preview bots (iMessage, Discord, Slack, WhatsApp, …) receive
 // a minimal HTML page whose <head> contains only the og:image tags.
 // Without a <script> tag, there is nothing for them to render, so they read
-// the og:image and show the coin-on-wood photo instead of screenshotting the
+// the og:image and show the lettered coin photo (share-card.jpg) instead of screenshotting the
 // React app.
 //
 // Search engines are a different case: they DO render JavaScript and should
@@ -76,15 +76,15 @@ function renderPreviewHTML({ title, description }) {
 <meta property="og:url" content="https://splittank.com">
 <meta property="og:title" content="${safeTitle}">
 <meta property="og:description" content="${safeDescription}">
-<meta property="og:image" content="https://splittank.com/preview.jpg">
+<meta property="og:image" content="https://splittank.com/share-card.jpg">
 <meta property="og:image:type" content="image/jpeg">
 <meta property="og:image:width" content="1200">
-<meta property="og:image:height" content="654">
-<meta property="og:image:alt" content="Split Tank — the gold coin on a wood surface surrounded by other coins">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Split Tank: a bronze coin with scales and a gas nozzle on a wooden table, lettered “Split gas money fairly.”">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="${safeTitle}">
 <meta name="twitter:description" content="${safeDescription}">
-<meta name="twitter:image" content="https://splittank.com/preview.jpg">
+<meta name="twitter:image" content="https://splittank.com/share-card.jpg">
 </head>
 <body>
 <h1>${safeTitle}</h1>
