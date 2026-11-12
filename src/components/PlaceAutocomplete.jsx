@@ -7,7 +7,7 @@ function makeSessionToken() {
   return crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2)
 }
 
-export default function PlaceAutocomplete({ value, onChange, onSelect, placeholder }) {
+export default function PlaceAutocomplete({ id, value, onChange, onSelect, placeholder }) {
   const [suggestions, setSuggestions] = useState([])
   const [open,        setOpen]        = useState(false)
   const [activeIdx,   setActiveIdx]   = useState(-1)
@@ -128,6 +128,7 @@ export default function PlaceAutocomplete({ value, onChange, onSelect, placehold
   return (
     <div className="place-autocomplete" ref={containerRef}>
       <input
+        id={id}
         type="text"
         inputMode="search"
         value={value}

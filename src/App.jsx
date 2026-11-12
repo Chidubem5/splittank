@@ -25,10 +25,11 @@
 //
 // ── COMPONENT TREE ────────────────────────────────────────────────────────────
 //  App
-//   ├─ RoadHero          (decorative banner SVG)
 //   ├─ Combobox ×4       (year / make / model / trim inputs)
-//   ├─ PaymentButtons    (Venmo / Cash App / Zelle / Apple Pay deep links)
-//   └─ RoadGallery       (three illustrated panels at page bottom)
+//   └─ PaymentButtons    (Venmo / Cash App / Zelle / Apple Pay deep links)
+//
+//  RoadHero.jsx / RoadGallery.jsx (cartoon illustrations) are no longer
+//  rendered since the highway-signage redesign; the files are kept unused.
 
 import { useState, useEffect, useRef, useMemo, lazy, Suspense } from 'react'
 import { getYears, getMakes, getModels, getOptions, getVehicleMPG, estimateTankSize } from './api/fuelEconomy'
@@ -40,8 +41,6 @@ import { fetchCounties } from './api/counties'             // Census Bureau coun
 import Combobox from './components/Combobox'               // custom typeahead input (replaces <datalist>)
 import PlaceAutocomplete from './components/PlaceAutocomplete'
 import { expandAcronym } from './data/acronyms'
-import RoadHero from './components/RoadHero'               // decorative SVG banner
-import RoadGallery from './components/RoadGallery'         // three illustrated panels
 import PaymentButtons from './components/PaymentButtons'   // Venmo/CashApp/Zelle/Apple Pay buttons
 import { buildSmsUrl } from './utils/sms'
 import { isEmail, buildMailtoUrl } from './utils/contact'
@@ -53,6 +52,16 @@ import { mostCommonTrimIdx } from './utils/trimPopularity'
 const GasPriceMap        = lazy(() => import('./components/GasPriceMap'))
 const ElectricityRateMap = lazy(() => import('./components/ElectricityRateMap'))
 import './App.css'
+
+// Small map-pin glyph used by the location button and chip (replaces the emoji).
+function PinIcon({ className }) {
+  return (
+    <svg className={className} viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+      <path d="M8 15s5-4.6 5-8.5A5 5 0 0 0 3 6.5C3 10.4 8 15 8 15Z" fill="currentColor" />
+      <circle cx="8" cy="6.5" r="1.9" fill="var(--pin-hole, #fff)" />
+    </svg>
+  )
+}
 
 export default function App() {
 
@@ -1044,28 +1053,48 @@ out geom;`,
     if (liveResult) resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
   }, [liveResult !== null]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Track whether the Total section is on screen, so the slim "Each owes" bar
+  // at the bottom of the viewport only appears when the result sign is out of view.
+  const [resultInView, setResultInView] = useState(true)
+  useEffect(() => {
+    const el = resultRef.current
+    if (!el || typeof IntersectionObserver === 'undefined') return
+    const io = new IntersectionObserver(([entry]) => setResultInView(entry.isIntersecting), { threshold: 0.15 })
+    io.observe(el)
+    return () => io.disconnect()
+  }, [])
+
+  // Headline amount for the result sign and the sticky bar. In custom mode the
+  // passengers owe different amounts, so the bar shows the trip total instead.
+  const headline = liveResult && (
+    liveResult.splitMode === 'custom' && liveResult.customAmounts
+      ? { label: 'Trip total', amount: liveResult.totalCost }
+      : { label: liveResult.passengers === 0 ? 'Your trip cost' : 'Each passenger owes', amount: liveResult.perPerson }
+  )
+
   return (
     <div className="app">
 
-      {/* ── HEADER ─────────────────────────────────────────────────────────── */}
+      {/* HEADER: the brand bar, then the hero line. Compact on purpose so the
+          calculator starts on the first screen. */}
       <header className="app-header">
-        <div className="header-inner">
-          <div>
-            <h1>Split Tank</h1>
-            <p>Figure out what everyone owes</p>
-          </div>
+        <div className="brand">
+          <span className="mark" data-mark="stack" aria-hidden="true" />
+          <span className="brand-name">Split Tank</span>
         </div>
       </header>
 
-      {/* Decorative road scene banner */}
-      <RoadHero />
-
       <main className="app-main">
+
+        <section className="hero" data-enter aria-labelledby="hero-h">
+          <h1 id="hero-h"><span className="hero-line">Gas money calculator for carpools and road trips</span></h1>
+          <p className="hero-fact">Uses today's AAA gas average for any of the 50 states, plus your car's EPA mileage.</p>
+        </section>
 
         {/* ── TRIP DETAILS ──────────────────────────────────────────────────── */}
         <section className="card">
           <div className="section-header">
-            <span className="section-title">Trip Details</span>
+            <h2 className="section-title"><span className="step-marker" aria-hidden="true">1</span>Trip</h2>
             <label className="round-trip-toggle">
               <input
                 type="checkbox"
@@ -1080,33 +1109,38 @@ out geom;`,
           <div className="fuel-toggle-row">
             <button
               className={`fuel-toggle-btn${!isEV ? ' active' : ''}`}
+              aria-pressed={!isEV}
               onClick={() => setIsEV(false)}
             >
-              ⛽ Gas
+              Gas
             </button>
             <button
               className={`fuel-toggle-btn${isEV ? ' active' : ''}`}
+              aria-pressed={isEV}
               onClick={() => setIsEV(true)}
             >
-              ⚡ Electric
+              Electric
             </button>
           </div>
 
           {/* Route calculator — primary input, always shown */}
           <div className="field">
-            <label>From / To</label>
             <div className="route-fields">
+                <label htmlFor="trip-from" className="route-label">From</label>
                 <PlaceAutocomplete
+                  id="trip-from"
                   value={tripFrom}
                   onChange={v => { setTripFrom(v); setCityRatio(null); setRouteSegments([]) }}
                   onSelect={setFromCoords}
-                  placeholder="From — city, address, or place name"
+                  placeholder="City, address, or place"
                 />
+                <label htmlFor="trip-to" className="route-label">To</label>
                 <PlaceAutocomplete
+                  id="trip-to"
                   value={tripTo}
                   onChange={v => { setTripTo(v); setCityRatio(null); setRouteSegments([]) }}
                   onSelect={setToCoords}
-                  placeholder="To — city, address, or place name"
+                  placeholder="City, address, or place"
                 />
                 <button
                   type="button"
@@ -1114,13 +1148,13 @@ out geom;`,
                   onClick={fetchRoute}
                   disabled={routeLoading || !tripFrom.trim() || !tripTo.trim()}
                 >
-                  {routeLoading ? 'Calculating…' : 'Get Route & Miles'}
+                  {routeLoading ? 'Finding the route…' : 'Find the route'}
                 </button>
                 {routeError && <p className="route-error">{routeError}</p>}
                 {cityRatio !== null && (
                   <p className="route-split">
-                    📍 {Math.round((1 - cityRatio) * 100)}% highway · {Math.round(cityRatio * 100)}% city
-                    {mpgData?.city && mpgData?.highway && !showManual && ' — using split MPG for accuracy'}
+                    {Math.round((1 - cityRatio) * 100)}% highway, {Math.round(cityRatio * 100)}% city
+                    {mpgData?.city && mpgData?.highway && !showManual && '. MPG is blended to match.'}
                   </p>
                 )}
 
@@ -1166,7 +1200,7 @@ out geom;`,
                       </div>
                       {tankIsEstimate && range && (
                         <p className="route-states-note">
-                          ⛽ Refuel tips based on ~{tank} gal estimated tank — enter your actual tank size below for accuracy.
+                          Fill-up tips assume a ~{tank} gal tank. Enter your real tank size under Car for better tips.
                         </p>
                       )}
                       {routeSegments.map((seg, i) => (
@@ -1177,7 +1211,7 @@ out geom;`,
                             ${seg.gasPrice?.toFixed(2) ?? '—'}/gal
                           </span>
                           {pitStopIdx.has(i) && (
-                            <span className="pit-stop-tag">⛽ Fill up here</span>
+                            <span className="pit-stop-tag">Fill up here</span>
                           )}
                         </div>
                       ))}
@@ -1191,24 +1225,26 @@ out geom;`,
           {miles && !showManualMiles ? (
             <div className="field">
               <div className="miles-auto-row">
-                <span className="miles-auto-value">{parseFloat(miles).toFixed(1)} miles</span>
+                <span className="miles-auto-value"><span className="mile-marker">{parseFloat(miles).toFixed(1)}</span> miles one way</span>
                 <button type="button" className="toggle-link" onClick={() => setShowManualMiles(true)}>
-                  edit
+                  Edit miles
                 </button>
               </div>
             </div>
           ) : (
             <div className="field">
-              <label>
+              <label htmlFor="miles">
                 Miles driven
                 {miles && (
                   <button type="button" className="toggle-link" onClick={() => setShowManualMiles(false)}>
-                    use route distance
+                    Use the route distance
                   </button>
                 )}
               </label>
               <input
+                id="miles"
                 type="number"
+                inputMode="decimal"
                 placeholder="e.g. 150"
                 value={miles}
                 onChange={e => { setMiles(e.target.value); setCityRatio(null) }}
@@ -1225,11 +1261,11 @@ out geom;`,
             {/* If location was already detected, show a chip instead of the button */}
             {detectedLocation ? (
               <div className="location-chip">
-                <span className="location-chip-icon">📍</span>
+                <PinIcon className="location-chip-icon" />
                 <span className="location-chip-text">
                   {/* .filter(Boolean) removes falsy values (null, undefined, '') before joining */}
                   {[detectedLocation.city, detectedLocation.county, detectedLocation.state]
-                    .filter(Boolean).join(' · ')}
+                    .filter(Boolean).join(', ')}
                 </span>
                 <button
                   type="button"
@@ -1249,7 +1285,7 @@ out geom;`,
                 >
                   {detectingLocation
                     ? <><span className="location-spinner" /> Detecting your location…</>
-                    : <><span className="location-pin-icon">📍</span> Use My Location</>
+                    : <><PinIcon className="location-pin-icon" /> Find my location</>
                   }
                 </button>
 
@@ -1262,7 +1298,7 @@ out geom;`,
                   >
                     {detectingAddressLoc
                       ? <><span className="location-spinner" /> Detecting…</>
-                      : <>Or use starting address</>
+                      : <>Use my starting address instead</>
                     }
                   </button>
                 )}
@@ -1300,8 +1336,9 @@ out geom;`,
               so the dropdown would be decorative noise. */}
           {state && METRO_STATES.has(state) && (
             <div className="field county-field">
-              <label>County</label>
+              <label htmlFor="county">County</label>
               <select
+                id="county"
                 value={county}
                 onChange={e => setCounty(e.target.value)}
                 disabled={loadingCounties}
@@ -1313,7 +1350,7 @@ out geom;`,
               </select>
               {/* Show which metro area data source is being used */}
               {county && livePriceLabel && (
-                <p className="county-note">📍 Using {livePriceLabel} prices</p>
+                <p className="county-note">Using {livePriceLabel} prices</p>
               )}
             </div>
           )}
@@ -1321,8 +1358,9 @@ out geom;`,
           {/* Gas price / electricity rate — switches label and behaviour in EV mode */}
           {isEV ? (
             <div className="field">
-              <label>Electricity rate ($/kWh)</label>
+              <label htmlFor="elec-rate">Electricity rate ($/kWh)</label>
               <input
+                id="elec-rate"
                 type="number"
                 step="0.01"
                 placeholder="e.g. 0.16"
@@ -1330,11 +1368,11 @@ out geom;`,
                 onChange={e => setElectricityRate(e.target.value)}
                 min="0"
               />
-              <p className="county-note">National avg ~$0.16/kWh · check your utility bill for your exact rate</p>
+              <p className="county-note">The national average is about $0.16/kWh. Your utility bill has your exact rate.</p>
             </div>
           ) : (
             <div className="field">
-              <label>
+              <label htmlFor="gas-price">
                 Gas price ($/gal)
                 {/* Badge: route weighted avg (multi-state), live EIA/AAA, or state avg */}
                 {routeSegments.length > 1 && customGas ? (
@@ -1342,7 +1380,7 @@ out geom;`,
                 ) : state && !customGas ? (
                   <span className="badge">
                     {livePriceDate
-                      ? `${livePriceSource === 'AAA' ? 'AAA' : 'EIA'} · ${livePriceDate}${livePriceLabel ? ` · ${livePriceLabel}` : ''}`
+                      ? `${livePriceSource === 'AAA' ? 'AAA' : 'EIA'}, ${livePriceDate}${livePriceLabel ? `, ${livePriceLabel}` : ''}`
                       : 'State avg'}
                   </span>
                 ) : null}
@@ -1350,14 +1388,16 @@ out geom;`,
 
               {(county || detectedLocation?.county) && !customGas && !livePriceLabel && (
                 <p className="county-note">
-                  📍 {county || detectedLocation.county} — using {state} weekly average.
-                  Tap the price to enter your local pump price.
+                  {county || detectedLocation.county}: using the {state} average.
+                  Type over the price to use your local pump price.
                 </p>
               )}
 
               <div className="gas-price-row">
                 <input
+                  id="gas-price"
                   type="number"
+                  inputMode="decimal"
                   step="0.01"
                   placeholder="e.g. 3.45"
                   value={gasPrice}
@@ -1381,7 +1421,7 @@ out geom;`,
                       }
                     })
                   }}>
-                    Reset to avg
+                    Use average
                   </button>
                 )}
               </div>
@@ -1391,7 +1431,7 @@ out geom;`,
 
         {/* ── THE CAR ───────────────────────────────────────────────────────── */}
         <section className="card">
-          <span className="section-title">{isEV ? 'The Vehicle (Efficiency)' : 'The Car (Mileage)'}</span>
+          <h2 className="section-title"><span className="step-marker" aria-hidden="true">2</span>{isEV ? 'Vehicle' : 'Car'}</h2>
 
           {/* Vehicle lookup — always shown for both EV and gas modes.
               Selecting an EV trim auto-switches to EV mode and fills mi/kWh from EPA data. */}
@@ -1403,8 +1443,9 @@ out geom;`,
               )}
               <div className="car-grid">
                 <div className="field">
-                  <label>Year</label>
+                  <label htmlFor="car-year">Year</label>
                   <Combobox
+                    id="car-year"
                     options={years.map(String)}
                     value={year}
                     onChange={setYear}
@@ -1413,8 +1454,9 @@ out geom;`,
                 </div>
 
                 <div className="field">
-                  <label>Make</label>
+                  <label htmlFor="car-make">Make</label>
                   <Combobox
+                    id="car-make"
                     options={makes}
                     value={make}
                     onChange={setMake}
@@ -1424,8 +1466,9 @@ out geom;`,
                 </div>
 
                 <div className="field">
-                  <label>Model</label>
+                  <label htmlFor="car-model">Model</label>
                   <Combobox
+                    id="car-model"
                     options={models}
                     value={model}
                     onChange={setModel}
@@ -1438,8 +1481,9 @@ out geom;`,
               {/* Trim picker — only shown when model has multiple trims */}
               {options.length > 1 && (
                 <div className="field">
-                  <label>Trim / Engine</label>
+                  <label htmlFor="car-trim">Trim or engine</label>
                   <Combobox
+                    id="car-trim"
                     options={options.map((o, i) =>
                       i === commonTrimIdx ? `${o.text} (Most Common)` : o.text
                     )}
@@ -1488,11 +1532,12 @@ out geom;`,
                 </div>
               )}
               <div className="field">
-                <label>Efficiency (mi/kWh)
+                <label htmlFor="ev-eff">Efficiency (mi/kWh)
                   {mpgData?.isEV && milesPerKwh && <span className="badge">EPA data</span>}
                 </label>
                 <div className="manual-mpg-row">
                   <input
+                    id="ev-eff"
                     type="number"
                     placeholder="e.g. 4.0"
                     value={milesPerKwh}
@@ -1503,7 +1548,7 @@ out geom;`,
                   <span>mi/kWh</span>
                 </div>
                 {!mpgData?.isEV && (
-                  <p className="county-note" style={{marginTop: 6}}>Typical: 3–5 mi/kWh · find it on your car's dashboard or EPA spec sheet</p>
+                  <p className="county-note" style={{marginTop: 6}}>Most EVs get 3 to 5 mi/kWh. Your dashboard or the EPA sticker shows yours.</p>
                 )}
               </div>
             </>
@@ -1517,6 +1562,7 @@ out geom;`,
                       <button
                         key={t}
                         className={`mpg-tab${mpgType === t ? ' active' : ''}`}
+                        aria-pressed={mpgType === t}
                         onClick={() => setMpgType(t)}
                       >
                         {t.charAt(0).toUpperCase() + t.slice(1)}
@@ -1540,13 +1586,14 @@ out geom;`,
                   <>
                     <div className="manual-mpg-row">
                       <input
+                        id="manual-mpg"
                         type="number"
                         placeholder="e.g. 28"
                         value={manualMpg}
                         onChange={e => setManualMpg(e.target.value)}
                         min="1"
                       />
-                      <span>MPG</span>
+                      <label htmlFor="manual-mpg">MPG</label>
                     </div>
                     {mpgData && (
                       <button onClick={() => { setShowManual(false); setManualMpg('') }}>
@@ -1563,13 +1610,14 @@ out geom;`,
               alongside their MPG. Used for refuel tips on multi-state routes. */}
           {!isEV && (
             <div className="field">
-              <label>
+              <label htmlFor="tank">
                 Tank size (gal)
                 <span className="badge badge-optional">optional</span>
               </label>
               <input
+                id="tank"
                 type="number"
-                placeholder="Check fuel filler door or owner's manual"
+                placeholder="Check the fuel door or owner's manual"
                 value={tankGallons}
                 onChange={e => setTankGallons(e.target.value)}
                 min="1"
@@ -1587,23 +1635,24 @@ out geom;`,
 
         {/* ── TOLLS ────────────────────────────────────────────────────────── */}
         <section className="card">
-          <span className="section-title">Tolls</span>
+          <h2 className="section-title"><span className="step-marker" aria-hidden="true">3</span>Tolls</h2>
           <p className="payment-info-hint">
             {tollsEstimated
               ? tolls === '0'
-                ? 'No tolls detected on this route — edit if you know otherwise.'
-                : 'Auto-estimated from your route — edit if you know the exact amount.'
-              : 'Tolls are auto-filled when you enter both addresses above.'}
+                ? 'No tolls found on this route. Change it if you know otherwise.'
+                : 'Estimated from your route. Change it if you know the exact amount.'
+              : 'Tolls fill in automatically once you get a route.'}
           </p>
           <div className="fuel-toggle-row">
             {[
-              { value: '2AxlesAuto', label: '🚗 Car / SUV' },
-              { value: '3Axles',     label: '🚚 Truck / Van' },
-              { value: '5Axles',     label: '🚛 Semi / 18-Wheeler' },
+              { value: '2AxlesAuto', label: 'Car or SUV' },
+              { value: '3Axles',     label: 'Truck or van' },
+              { value: '5Axles',     label: 'Semi' },
             ].map(opt => (
               <button
                 key={opt.value}
                 className={`fuel-toggle-btn${tollVehicleType === opt.value ? ' active' : ''}`}
+                aria-pressed={tollVehicleType === opt.value}
                 onClick={() => setTollVehicleType(opt.value)}
               >
                 {opt.label}
@@ -1612,11 +1661,12 @@ out geom;`,
           </div>
 
           <div className="field">
-            <label>
+            <label htmlFor="tolls">
               Total tolls ($)
               {tollsEstimated && <span className="badge">estimated</span>}
             </label>
             <input
+              id="tolls"
               type="number"
               step="0.25"
               placeholder="e.g. 8.50"
@@ -1629,7 +1679,7 @@ out geom;`,
 
         {/* ── THE TOTAL ─────────────────────────────────────────────────────── */}
         <section className="card result-card" ref={resultRef}>
-          <span className="section-title">The Total</span>
+          <h2 className="section-title"><span className="step-marker" aria-hidden="true">4</span>Total</h2>
 
           <div className="field">
             <label>Passengers (not counting the driver)</label>
@@ -1650,7 +1700,7 @@ out geom;`,
               </button>
             </div>
             {passengers === 0 && (
-              <p className="county-note">Solo trip — no one to split with, this is just your cost.</p>
+              <p className="county-note">Driving alone, so the total is just your cost.</p>
             )}
           </div>
 
@@ -1692,7 +1742,7 @@ out geom;`,
                   />
                   <div className="split-option-text">
                     <strong>Custom percentages</strong>
-                    <p>Each passenger pays a different share — set the % below</p>
+                    <p>Set each passenger's share below. The driver covers the rest.</p>
                   </div>
                 </label>
               </div>
@@ -1732,9 +1782,9 @@ out geom;`,
                 const driver = Math.max(0, 100 - total).toFixed(1)
                 return (
                   <p className="custom-shares-summary">
-                    Passengers: {total.toFixed(1)}% · Driver pays: {driver}%
+                    Passengers {total.toFixed(1)}%, driver {driver}%
                     {Math.abs(total - 100) > 0.1 && total > 100 && (
-                      <span className="custom-shares-warning"> — over 100%</span>
+                      <span className="custom-shares-warning">. Shares add up to more than 100%.</span>
                     )}
                   </p>
                 )
@@ -1745,91 +1795,101 @@ out geom;`,
           {/* Show results if all inputs are filled, otherwise show placeholder */}
           {liveResult ? (
             <>
-              <div className="result-stats">
+              {/* THE RESULT SIGN: a blue interstate service sign. The one bold
+                  element on the page. Custom splits list each passenger on it. */}
+              <div className="result-sign" role="status" aria-live="polite">
+                {liveResult.splitMode === 'custom' && liveResult.customAmounts ? (
+                  <div className="custom-split-result">
+                    {liveResult.customAmounts.map((amt, i) => (
+                      <div key={i} className="custom-split-result-row">
+                        <span>Passenger {i + 1} <span className="custom-split-pct">{customShares[i] || 0}%</span></span>
+                        <span className="custom-split-result-amount">${amt.toFixed(2)}</span>
+                      </div>
+                    ))}
+                    {liveResult.driverPct > 0.05 && (
+                      <div className="custom-split-result-row custom-split-result-driver">
+                        <span>Driver <span className="custom-split-pct">{liveResult.driverPct.toFixed(1)}%</span></span>
+                        <span className="custom-split-result-amount">${liveResult.driverAmount.toFixed(2)}</span>
+                      </div>
+                    )}
+                    <div className="custom-split-result-total">
+                      <span>Trip total</span>
+                      <span>${liveResult.totalCost.toFixed(2)}</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="per-person-box">
+                    <span className="per-person-label">{headline.label}</span>
+                    <span className="per-person-amount" key={headline.amount.toFixed(2)}>
+                      ${headline.amount.toFixed(2)}
+                    </span>
+                    <p className="per-person-note">
+                      {liveResult.passengers === 0
+                        ? `Driving alone, ${Math.round(liveResult.miles)} miles`
+                        : liveResult.splitMode === 'even'
+                        ? `${liveResult.passengers + 1} people splitting evenly, ${Math.round(liveResult.miles)} miles`
+                        : `${liveResult.passengers} passenger${liveResult.passengers > 1 ? 's' : ''} covering the driver, ${Math.round(liveResult.miles)} miles`
+                      }
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Itemized breakdown: how the sign's number was reached */}
+              <dl className="result-stats">
                 <div className="stat">
-                  <span className="stat-label">{liveResult.isEV ? 'kWh used' : 'Gas used'}</span>
-                  <span className="stat-value">{liveResult.gallons.toFixed(2)} {liveResult.isEV ? 'kWh' : 'gal'}</span>
+                  <dt className="stat-label">{liveResult.isEV ? 'Electricity used' : 'Gas used'}</dt>
+                  <dd className="stat-value">{liveResult.gallons.toFixed(2)} {liveResult.isEV ? 'kWh' : 'gal'}</dd>
                 </div>
                 <div className="stat">
-                  <span className="stat-label">{liveResult.tollAmount > 0 ? (liveResult.isEV ? 'Elec. cost' : 'Gas cost') : (liveResult.isEV ? 'Elec. cost' : 'Total gas cost')}</span>
-                  <span className="stat-value">${liveResult.gasCost.toFixed(2)}</span>
+                  <dt className="stat-label">{liveResult.isEV ? 'Rate' : 'Price'}</dt>
+                  <dd className="stat-value">${liveResult.gp.toFixed(2)} {liveResult.isEV ? 'per kWh' : 'per gal'}</dd>
+                </div>
+                <div className="stat">
+                  <dt className="stat-label">{liveResult.isEV ? 'Efficiency' : 'Mileage'}</dt>
+                  <dd className="stat-value">{liveResult.mpg} {liveResult.isEV ? 'mi/kWh' : 'mpg'}</dd>
+                </div>
+                <div className="stat">
+                  <dt className="stat-label">{liveResult.isEV ? 'Electricity cost' : 'Gas cost'}</dt>
+                  <dd className="stat-value">${liveResult.gasCost.toFixed(2)}</dd>
                 </div>
                 {liveResult.tollAmount > 0 && (
                   <div className="stat">
-                    <span className="stat-label">Tolls</span>
-                    <span className="stat-value">${liveResult.tollAmount.toFixed(2)}</span>
+                    <dt className="stat-label">Tolls</dt>
+                    <dd className="stat-value">${liveResult.tollAmount.toFixed(2)}</dd>
                   </div>
                 )}
-                <div className="stat">
-                  <span className="stat-label">{liveResult.isEV ? 'Efficiency' : 'MPG used'}</span>
-                  <span className="stat-value">{liveResult.mpg} {liveResult.isEV ? 'mi/kWh' : 'mpg'}</span>
+                <div className="stat stat-total">
+                  <dt className="stat-label">Trip total</dt>
+                  <dd className="stat-value">${liveResult.totalCost.toFixed(2)}</dd>
                 </div>
-                <div className="stat">
-                  <span className="stat-label">{liveResult.isEV ? 'Rate/kWh' : 'Price/gal'}</span>
-                  <span className="stat-value">${liveResult.gp.toFixed(2)}</span>
-                </div>
-              </div>
-
-              {/* Custom split breakdown — shown instead of the single big number */}
-              {liveResult.splitMode === 'custom' && liveResult.customAmounts ? (
-                <div className="custom-split-result">
-                  {liveResult.customAmounts.map((amt, i) => (
-                    <div key={i} className="custom-split-result-row">
-                      <span>Passenger {i + 1} ({customShares[i]}%)</span>
-                      <span className="custom-split-result-amount">${amt.toFixed(2)}</span>
-                    </div>
-                  ))}
-                  {liveResult.driverPct > 0.05 && (
-                    <div className="custom-split-result-row custom-split-result-driver">
-                      <span>Driver ({liveResult.driverPct.toFixed(1)}%)</span>
-                      <span className="custom-split-result-amount">${liveResult.driverAmount.toFixed(2)}</span>
-                    </div>
-                  )}
-                  <div className="custom-split-result-total">
-                    Total: ${liveResult.totalCost.toFixed(2)}
-                  </div>
-                </div>
-              ) : (
-                /* Big per-person number — the main result */
-                <div className="per-person-box">
-                  <span className="per-person-label">
-                    {liveResult.passengers === 0 ? 'Your trip cost' : 'Each passenger owes'}
-                  </span>
-                  <span className="per-person-amount">${liveResult.perPerson.toFixed(2)}</span>
-                  <p className="per-person-note">
-                    {liveResult.passengers === 0
-                      ? 'Solo trip — no one to split with'
-                      : liveResult.splitMode === 'even'
-                      ? `${liveResult.passengers + 1} people splitting evenly`
-                      : `${liveResult.passengers} passenger${liveResult.passengers > 1 ? 's' : ''} covering the driver`
-                    }
-                  </p>
-                </div>
-              )}
+              </dl>
 
               <div className="result-actions">
                 {navigator.share && (
                   <button className="share-btn" onClick={shareResult}>
-                    📤 Share
+                    Share the total
                   </button>
                 )}
                 <button className="copy-link-btn" onClick={copyLink}>
-                  {copyLinkToast ? '✓ Copied!' : '🔗 Copy link'}
+                  {copyLinkToast ? 'Link copied' : 'Copy the link'}
                 </button>
               </div>
             </>
           ) : (
-            <p className="total-placeholder">
-              Fill in trip details and car info above to see the total.
-            </p>
+            <div className="result-sign result-sign--empty">
+              <p className="total-placeholder">
+                Add a route or miles, a gas price, and your car. The total shows up here as you type.
+              </p>
+            </div>
           )}
         </section>
 
         {/* ── PAYMENT INFO ─────────────────────────────────────────────────── */}
         <section className="card">
-          <span className="section-title">Driver payment info</span>
+          <h2 className="section-title"><span className="step-marker" aria-hidden="true">5</span>Pay the driver</h2>
           <p className="payment-info-hint">
-            Optional — fill in the driver's handles so passengers get a direct pay link.
+            Optional. Add the driver's handles so passengers get a pay link with the amount filled in.
           </p>
 
           {/* Payment handle inputs — each method supports multiple contacts */}
@@ -1837,80 +1897,88 @@ out geom;`,
 
             {/* Venmo */}
             <div className="field">
-              <label>Venmo username</label>
+              <label htmlFor="venmo-0">Venmo username</label>
               {venmoHandles.map((h, i) => (
                 <div className="handle-input-row multi-contact-row" key={i}>
                   <span className="handle-prefix venmo-prefix">@</span>
                   <input
+                    id={`venmo-${i}`}
+                    aria-label={i > 0 ? `Venmo username ${i + 1}` : undefined}
                     type="text"
                     placeholder="username"
                     value={h}
                     onChange={e => updateContact(setVenmoHandles, i, e.target.value.replace(/^@/, ''))}
                   />
                   {venmoHandles.length > 1 && (
-                    <button type="button" className="remove-contact-btn" onClick={() => removeContact(setVenmoHandles, i)}>✕</button>
+                    <button type="button" className="remove-contact-btn" aria-label="Remove" onClick={() => removeContact(setVenmoHandles, i)}>✕</button>
                   )}
                 </div>
               ))}
-              <button type="button" className="add-contact-btn" onClick={() => addContact(setVenmoHandles)}>+ add</button>
+              <button type="button" className="add-contact-btn" onClick={() => addContact(setVenmoHandles)}>Add another</button>
             </div>
 
             {/* Cash App */}
             <div className="field">
-              <label>Cash App $cashtag</label>
+              <label htmlFor="cashapp-0">Cash App $cashtag</label>
               {cashAppHandles.map((h, i) => (
                 <div className="handle-input-row multi-contact-row" key={i}>
                   <span className="handle-prefix cashapp-prefix">$</span>
                   <input
+                    id={`cashapp-${i}`}
+                    aria-label={i > 0 ? `Cash App $cashtag ${i + 1}` : undefined}
                     type="text"
                     placeholder="cashtag"
                     value={h}
                     onChange={e => updateContact(setCashAppHandles, i, e.target.value.replace(/^\$/, ''))}
                   />
                   {cashAppHandles.length > 1 && (
-                    <button type="button" className="remove-contact-btn" onClick={() => removeContact(setCashAppHandles, i)}>✕</button>
+                    <button type="button" className="remove-contact-btn" aria-label="Remove" onClick={() => removeContact(setCashAppHandles, i)}>✕</button>
                   )}
                 </div>
               ))}
-              <button type="button" className="add-contact-btn" onClick={() => addContact(setCashAppHandles)}>+ add</button>
+              <button type="button" className="add-contact-btn" onClick={() => addContact(setCashAppHandles)}>Add another</button>
             </div>
 
             {/* Zelle */}
             <div className="field">
-              <label>Zelle</label>
+              <label htmlFor="zelle-0">Zelle</label>
               {zelleContacts.map((c, i) => (
                 <div className="multi-contact-row" key={i}>
                   <input
+                    id={`zelle-${i}`}
+                    aria-label={i > 0 ? `Zelle ${i + 1}` : undefined}
                     type="text"
                     placeholder="phone or email"
                     value={c}
                     onChange={e => updateContact(setZelleContacts, i, e.target.value)}
                   />
                   {zelleContacts.length > 1 && (
-                    <button type="button" className="remove-contact-btn" onClick={() => removeContact(setZelleContacts, i)}>✕</button>
+                    <button type="button" className="remove-contact-btn" aria-label="Remove" onClick={() => removeContact(setZelleContacts, i)}>✕</button>
                   )}
                 </div>
               ))}
-              <button type="button" className="add-contact-btn" onClick={() => addContact(setZelleContacts)}>+ add</button>
+              <button type="button" className="add-contact-btn" onClick={() => addContact(setZelleContacts)}>Add another</button>
             </div>
 
             {/* Apple Pay */}
             <div className="field">
-              <label>Apple Pay</label>
+              <label htmlFor="apple-0">Apple Pay</label>
               {appleContacts.map((c, i) => (
                 <div className="multi-contact-row" key={i}>
                   <input
+                    id={`apple-${i}`}
+                    aria-label={i > 0 ? `Apple Pay ${i + 1}` : undefined}
                     type="text"
                     placeholder="phone number"
                     value={c}
                     onChange={e => updateContact(setAppleContacts, i, e.target.value)}
                   />
                   {appleContacts.length > 1 && (
-                    <button type="button" className="remove-contact-btn" onClick={() => removeContact(setAppleContacts, i)}>✕</button>
+                    <button type="button" className="remove-contact-btn" aria-label="Remove" onClick={() => removeContact(setAppleContacts, i)}>✕</button>
                   )}
                 </div>
               ))}
-              <button type="button" className="add-contact-btn" onClick={() => addContact(setAppleContacts)}>+ add</button>
+              <button type="button" className="add-contact-btn" onClick={() => addContact(setAppleContacts)}>Add another</button>
             </div>
           </div>
 
@@ -1927,7 +1995,7 @@ out geom;`,
                     onChange={e => setViewerShareIdx(Number(e.target.value))}
                   >
                     {liveResult.customAmounts.map((amt, i) => (
-                      <option key={i} value={i}>Passenger {i + 1} — ${amt.toFixed(2)}</option>
+                      <option key={i} value={i}>Passenger {i + 1}: ${amt.toFixed(2)}</option>
                     ))}
                   </select>
                 </div>
@@ -1946,7 +2014,7 @@ out geom;`,
             </>
           ) : (
             <p className="payment-pending-hint">
-              Fill in the trip details above to unlock the send button.
+              Pay buttons appear once there's a total.
             </p>
           )}
 
@@ -1955,8 +2023,8 @@ out geom;`,
             <div className="request-section">
               <p className="payment-heading">Request from passengers</p>
               <p className="payment-info-hint" style={{ marginBottom: 10 }}>
-                Enter each passenger's phone number or email and tap Send —
-                they'll get a text or email with the amount and a direct payment link.
+                Enter each passenger's phone number or email. They get a text or email
+                with their amount and a pay link.
               </p>
               {passengerContacts.map((contact, i) => {
                 const wasSent = sentContacts.has(i)
@@ -1990,12 +2058,12 @@ out geom;`,
                         setSentContacts(prev => new Set(prev).add(i))
                       }}
                     >
-                      {wasSent ? 'Sent ✓' : viaEmail ? 'Email' : 'Text'}
+                      {wasSent ? 'Sent' : viaEmail ? 'Send email' : 'Send text'}
                     </button>
                     {passengerContacts.length > 1 && (
                       <button
                         type="button"
-                        className="remove-contact-btn"
+                        className="remove-contact-btn" aria-label="Remove"
                         onClick={() => {
                           removeContact(setPassengerContacts, i)
                           setSentContacts(prev => { const n = new Set(prev); n.delete(i); return n })
@@ -2012,13 +2080,13 @@ out geom;`,
                 className="add-contact-btn"
                 onClick={() => addContact(setPassengerContacts)}
               >
-                + add passenger
+                Add a passenger
               </button>
 
               {/* Fallback: show the handle as plain text so passengers can copy it manually */}
               {(venmoHandles.find(h => h.trim()) || cashAppHandles.find(h => h.trim()) || zelleContacts.find(c => c.trim())) && (
                 <div className="request-fallback">
-                  <p className="request-fallback-label">If the link doesn't open, share your handle directly:</p>
+                  <p className="request-fallback-label">If a link doesn't open, send your handle instead:</p>
                   {venmoHandles.find(h => h.trim()) && (
                     <span className="request-fallback-handle">Venmo: @{venmoHandles.find(h => h.trim())}</span>
                   )}
@@ -2043,19 +2111,23 @@ out geom;`,
             onClick={() => setShowMap(s => !s)}
             aria-expanded={showMap}
           >
-            <span>{mapMode === 'electric' ? 'Electricity Rate Map' : 'Gas Price Heat Map'}</span>
-            <span className="gas-map-toggle-icon" aria-hidden="true">{showMap ? '▲' : '▼'}</span>
+            <span>{showMap ? 'Hide' : 'Show'} {mapMode === 'electric' ? 'electricity rates' : 'gas prices'} by state</span>
+            <svg className={`gas-map-toggle-icon${showMap ? ' open' : ''}`} viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
+              <path d="M2 4.5 6 8.5 10 4.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
           </button>
           {showMap && (
             <div className="map-mode-toggle">
               <button
                 className={`map-mode-btn${mapMode === 'gas' ? ' active' : ''}`}
+                aria-pressed={mapMode === 'gas'}
                 onClick={() => setMapMode('gas')}
               >
                 Gas
               </button>
               <button
                 className={`map-mode-btn${mapMode === 'electric' ? ' active' : ''}`}
+                aria-pressed={mapMode === 'electric'}
                 onClick={() => setMapMode('electric')}
               >
                 Electric
@@ -2073,11 +2145,26 @@ out geom;`,
         )}
       </div>
 
-      <RoadGallery />
-
       <footer className="app-footer">
-        {isEV ? 'Electricity rate entered manually.' : 'Gas prices sourced from AAA (daily) with EIA as fallback.'}
+        {isEV
+          ? 'The electricity rate starts at the $0.16/kWh national average until you change it. Vehicle data from FuelEconomy.gov.'
+          : 'Gas prices are AAA daily state averages, with EIA weekly data as a backup. Vehicle data from FuelEconomy.gov.'}
       </footer>
+
+      {/* Sticky "Each owes" bar: appears on small screens when the result
+          sign has scrolled out of view. Tapping it jumps back to the sign. */}
+      {headline && (
+        <button
+          type="button"
+          className={`owe-bar${resultInView ? '' : ' owe-bar--shown'}`}
+          aria-hidden={resultInView}
+          tabIndex={resultInView ? -1 : 0}
+          onClick={() => resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+        >
+          <span className="owe-bar-label">{headline.label}</span>
+          <span className="owe-bar-amount">${headline.amount.toFixed(2)}</span>
+        </button>
+      )}
     </div>
   )
 }
