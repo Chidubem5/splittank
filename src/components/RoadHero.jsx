@@ -5,11 +5,14 @@
 // poles on a two-lane road. At night (see hooks/useNightMode.js) the sun
 // becomes a moon, stars come out and the headlights switch on.
 //
-// The scene is drawn on a 1280×200 canvas and rendered with
-// preserveAspectRatio="xMidYMax slice": it fills the full width, and on
-// narrow screens the sides are cropped while the car stays centred.
-// Shapes extend past both edges (x < 0, x > 1280) so nothing ends abruptly
-// on ultra-wide screens.
+// Sizing: the car sits in the middle of a 1280×200 drawing. The scenery
+// (trees, poles, clouds, hills, road) repeats every 1280 units to the left
+// and right. The banner measures itself and widens the viewBox to match its
+// own aspect ratio, so on wide screens you see more countryside at the same
+// scale instead of a zoomed-in crop; on narrow screens (slice) the sides are
+// cropped and the car stays centred.
+
+import { useEffect, useRef, useState } from 'react'
 
 const DAY = {
   sky: '#29B6F6', sun: '#FFC107', cloud: '#FFFFFF', hill: '#9CCC65', grass: '#66BB6A',
@@ -24,8 +27,32 @@ const NIGHT = {
 
 const OUTLINE = 2 // stroke width of the coloring-book outline
 
-const POLES = [-240, 80, 400, 720, 1040, 1360]
+const TILE = 1280                       // scenery repeats every TILE units
+const TILES = [-2, -1, 0, 1, 2]          // covers viewports up to ~5× wider than tall×6.4
+const SPAN = { x: -2700, w: 6700 }       // sky / grass / road extent
+const POLES = Array.from({ length: 21 }, (_, i) => -2800 + i * 320 + 80)
 const STARS = [[300, 30, 2], [455, 58, 1.6], [560, 22, 2], [980, 30, 1.6], [1060, 18, 2], [180, 84, 1.4], [1180, 52, 1.6], [700, 36, 1.4]]
+// One tile of trees: [x, kind, radius]
+const TREES = [[30, 'tree', 20], [210, 'tree', 24], [300, 'bush'], [486, 'tree', 22], [850, 'bush'], [940, 'tree', 26], [1170, 'bush']]
+const HILL = 'M-200 128 C-80 104 20 98 120 122 S350 100 470 122 S700 96 820 120 S1060 92 1180 116 S1400 104 1480 114 V146 H-200 Z'
+
+// Viewbox wide enough to match the banner's own aspect ratio (never narrower
+// than the 1280-unit drawing), centred on the car.
+function useSceneViewBox() {
+  const ref = useRef(null)
+  const [w, setW] = useState(TILE)
+  useEffect(() => {
+    const el = ref.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect
+      if (width && height) setW(Math.max(TILE, Math.round((width * 200) / height)))
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+  return [ref, `${TILE / 2 - w / 2} 0 ${w} 200`]
+}
 const RIDERS = [
   { x: 615, skin: '#8D5524', hair: '#1A1A2E', shirt: '#43A047', style: 'bun' },
   { x: 635, skin: '#FFDBAC', hair: '#B5651D', shirt: '#FFC107', style: 'long' },
@@ -168,38 +195,39 @@ function Car({ night, c }) {
 
 export default function RoadHero({ night = false }) {
   const c = night ? NIGHT : DAY
+  const [ref, viewBox] = useSceneViewBox()
   return (
-    <div className="road-hero">
+    <div className="road-hero" ref={ref}>
       <svg
-        viewBox="0 0 1280 200"
+        viewBox={viewBox}
         preserveAspectRatio="xMidYMax slice"
         role="img"
         aria-label={`A car with four people drives past trees and utility poles on a two-lane road${night ? ' at night, headlights on' : ''}`}
       >
-        <rect x={-200} width={1680} height={200} fill={c.sky} />
-        {night && <g fill="#FFFFFF">{STARS.map(([x, y, r]) => <circle key={x} cx={x} cy={y} r={r} />)}</g>}
+        <rect x={SPAN.x} width={SPAN.w} height={200} fill={c.sky} />
+        {night && (
+          <g fill="#FFFFFF">
+            {TILES.flatMap(t => STARS.map(([x, y, r]) => <circle key={`${t}-${x}`} cx={x + t * TILE} cy={y} r={r} />))}
+          </g>
+        )}
         <SunOrMoon night={night} c={c} />
-        <Cloud x={440} y={56} c={c} />
-        <Cloud x={1010} y={58} c={c} />
-        <Cloud x={130} y={52} c={c} />
-        <path d="M-200 128 C-80 104 20 98 120 122 S350 100 470 122 S700 96 820 120 S1060 92 1180 116 S1400 104 1480 114 V146 H-200 Z" fill={c.hill} />
+        {TILES.map(t => (
+          <g key={t} transform={`translate(${t * TILE} 0)`}>
+            <Cloud x={440} y={56} c={c} />
+            <Cloud x={1010} y={58} c={c} />
+            <Cloud x={130} y={52} c={c} />
+            <path d={HILL} fill={c.hill} />
+          </g>
+        ))}
         <Wires c={c} />
         {POLES.map(x => <Pole key={x} x={x} c={c} />)}
-        <Tree x={-130} r={22} c={c} />
-        <BushyTree x={-40} c={c} />
-        <Tree x={30} r={20} c={c} />
-        <Tree x={210} c={c} />
-        <BushyTree x={300} c={c} />
-        <Tree x={486} r={22} c={c} />
-        <BushyTree x={850} c={c} />
-        <Tree x={940} r={26} c={c} />
-        <BushyTree x={1170} c={c} />
-        <Tree x={1250} r={22} c={c} />
-        <BushyTree x={1330} c={c} />
-        <rect x={-200} y={138} width={1680} height={10} fill={c.grass} />
-        <rect x={-200} y={146} width={1680} height={54} fill={c.road} />
-        <line x1={-200} y1={150} x2={1480} y2={150} stroke={c.edge} strokeWidth={3} />
-        <line x1={-220} y1={176} x2={1500} y2={176} stroke="#FFC107" strokeWidth={5} strokeDasharray="34 26" />
+        {TILES.flatMap(t => TREES.map(([x, kind, r]) => kind === 'bush'
+          ? <BushyTree key={`${t}-${x}`} x={x + t * TILE} c={c} />
+          : <Tree key={`${t}-${x}`} x={x + t * TILE} r={r} c={c} />))}
+        <rect x={SPAN.x} y={138} width={SPAN.w} height={10} fill={c.grass} />
+        <rect x={SPAN.x} y={146} width={SPAN.w} height={54} fill={c.road} />
+        <line x1={SPAN.x} y1={150} x2={SPAN.x + SPAN.w} y2={150} stroke={c.edge} strokeWidth={3} />
+        <line x1={SPAN.x} y1={176} x2={SPAN.x + SPAN.w} y2={176} stroke="#FFC107" strokeWidth={5} strokeDasharray="34 26" />
         <Car night={night} c={c} />
       </svg>
     </div>
