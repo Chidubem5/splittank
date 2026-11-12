@@ -63,8 +63,20 @@ function escapeHtml(str) {
     .replace(/"/g, '&quot;')
 }
 
-function renderPreviewHTML({ title, description }) {
+// Bump SHARE_CARD_VERSION whenever public/share-card.jpg changes: link
+// previewers (iMessage especially) cache by image URL, including failures.
+const SHARE_CARD_VERSION = 2
+
+// The image URL uses the request's own origin, so a Vercel preview deployment
+// points at its own copy of the image instead of production's (which may not
+// exist yet) — otherwise iMessage falls back to screenshotting the page.
+function shareCardURL(origin) {
+  return `${origin}/share-card.jpg?v=${SHARE_CARD_VERSION}`
+}
+
+function renderPreviewHTML({ title, description }, imageURL) {
   const safeTitle = escapeHtml(title)
+  const safeImage = escapeHtml(imageURL)
   const safeDescription = escapeHtml(description)
   return `<!DOCTYPE html>
 <html lang="en">
@@ -76,7 +88,7 @@ function renderPreviewHTML({ title, description }) {
 <meta property="og:url" content="https://splittank.com">
 <meta property="og:title" content="${safeTitle}">
 <meta property="og:description" content="${safeDescription}">
-<meta property="og:image" content="https://splittank.com/share-card.jpg">
+<meta property="og:image" content="${safeImage}">
 <meta property="og:image:type" content="image/jpeg">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
@@ -84,7 +96,7 @@ function renderPreviewHTML({ title, description }) {
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="${safeTitle}">
 <meta name="twitter:description" content="${safeDescription}">
-<meta name="twitter:image" content="https://splittank.com/share-card.jpg">
+<meta name="twitter:image" content="${safeImage}">
 </head>
 <body>
 <h1>${safeTitle}</h1>
@@ -98,8 +110,8 @@ export default function middleware(request) {
   const ua = request.headers.get('user-agent') || ''
   if (SEARCH_ENGINE_PATTERN.test(ua)) return // let Vercel serve the real React app
   if (BOT_PATTERN.test(ua)) {
-    const { searchParams } = new URL(request.url)
-    return new Response(renderPreviewHTML(buildPreviewCopy(searchParams)), {
+    const { searchParams, origin } = new URL(request.url)
+    return new Response(renderPreviewHTML(buildPreviewCopy(searchParams), shareCardURL(origin)), {
       headers: {
         'Content-Type': 'text/html; charset=utf-8',
         // Shorter cache than before — this response now varies by query string

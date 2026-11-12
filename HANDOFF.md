@@ -80,7 +80,10 @@ public/
   favicon.svg / favicon.ico / favicon-32.png, apple-touch-icon.png,
   logo-192/512.png, maskable-192/512.png   — the "S Road" logo in every size
   share-card.jpg                         — the link preview (coin photo + lettering), used by
-                                           index.html, middleware.js and the Share button
+                                           index.html, middleware.js and the Share button.
+                                           Previewers cache by image URL: when the image changes,
+                                           bump ?v= in index.html and SHARE_CARD_VERSION in
+                                           middleware.js
 
 ---
 
