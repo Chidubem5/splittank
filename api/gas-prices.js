@@ -8,6 +8,20 @@
 // Response: { prices: { "Alaska": 5.279, "California": 6.143, ... }, date: "May 17", source: "AAA" }
 // Error:    { error: "..." }  with a non-200 status
 
+// The 50 states plus DC. Anything else the row parser picks up (nav links
+// like "Skip to content", header cells, footer text) is not a state.
+const STATES = new Set([
+  'Alabama', 'Alaska', 'Arizona', 'Arkansas', 'California', 'Colorado',
+  'Connecticut', 'Delaware', 'District of Columbia', 'Florida', 'Georgia',
+  'Hawaii', 'Idaho', 'Illinois', 'Indiana', 'Iowa', 'Kansas', 'Kentucky',
+  'Louisiana', 'Maine', 'Maryland', 'Massachusetts', 'Michigan', 'Minnesota',
+  'Mississippi', 'Missouri', 'Montana', 'Nebraska', 'Nevada', 'New Hampshire',
+  'New Jersey', 'New Mexico', 'New York', 'North Carolina', 'North Dakota',
+  'Ohio', 'Oklahoma', 'Oregon', 'Pennsylvania', 'Rhode Island',
+  'South Carolina', 'South Dakota', 'Tennessee', 'Texas', 'Utah', 'Vermont',
+  'Virginia', 'Washington', 'West Virginia', 'Wisconsin', 'Wyoming',
+])
+
 export default async function handler(req, res) {
   // s-maxage: Vercel CDN caches this for 6 hours
   // stale-while-revalidate: serve the old response for up to 24 more hours
@@ -42,9 +56,9 @@ export default async function handler(req, res) {
       const state = stateMatch[1].trim()
       const price = parseFloat(priceMatch[1])
 
-      // Sanity-check: skip header cells, nav links, footer text.
-      // Valid state names are ≥ 4 chars; valid prices are between $0.50 and $15.
-      if (state.length >= 4 && price > 0.5 && price < 15) {
+      // Sanity-check: only real state names, and prices between $0.50 and $15.
+      // The first state match wins so a stray later row can't overwrite it.
+      if (STATES.has(state) && !(state in prices) && price > 0.5 && price < 15) {
         prices[state] = price
       }
     }
