@@ -6,15 +6,14 @@
 //   1. Metro area  — 10 major cities (e.g. "Los Angeles metro")
 //   2. State       — ~9 states have their own weekly survey
 //   3. PADD sub-region — regional average covering groups of states
-//   4. Static fallback (gasPrices.js) — hardcoded if no API key is set
+//   4. Static fallback (gasPrices.js), hardcoded, used if the proxies are unavailable
 //
 // Each result is cached in localStorage for 24 hours so we don't
 // hammer the API on every page load.
 
-// Read the EIA API key from the Vite environment variable.
-// In development, set VITE_EIA_API_KEY in your .env file.
-// In production, set it in the Vercel dashboard under Environment Variables.
-const EIA_KEY = import.meta.env.VITE_EIA_API_KEY
+// EIA requests go through our own serverless proxy (/api/eia-gas) so the
+// EIA API key stays server-side and never ships in the browser bundle.
+// Set EIA_API_KEY in the Vercel dashboard under Environment Variables.
 
 // Cache TTLs
 const CACHE_TTL     = 86_400_000  // 24 hours — EIA (weekly data, no point refreshing faster)
@@ -184,28 +183,25 @@ function setCached(key, result) {
 }
 
 // ─────────────────────────────────────────
-// fetchArea — low-level EIA API call
-// Queries the EIA for the most recent weekly price for one area code.
-// Returns { price: 3.45, period: "2026-04-14" } or null on failure.
-// The EIA response looks like:
-//   { response: { data: [{ value: "3.450", period: "2026-04-14" }] } }
+// fetchEIAareas: EIA weekly prices via our /api/eia-gas proxy
+// Takes an array of EIA area codes; returns { AREA: { price, period } }
+// or null on failure (503 = EIA_API_KEY not set on the server).
 // ─────────────────────────────────────────
+async function fetchEIAareas(areas) {
+  try {
+    const res = await fetch(`/api/eia-gas?areas=${areas.join(',')}`)
+    if (!res.ok) return null
+    return (await res.json())?.areas ?? null
+  } catch {
+    return null
+  }
+}
+
+// fetchArea: latest weekly EIA price for one area code.
+// Returns { price: 3.45, period: "2026-04-14" } or null on failure.
 async function fetchArea(area) {
-  const url =
-    `https://api.eia.gov/v2/petroleum/pri/gnd/data/` +
-    `?api_key=${EIA_KEY}` +
-    `&frequency=weekly` +
-    `&data[0]=value` +
-    `&facets[product][]=EPM0` +      // EPM0 = regular unleaded gasoline
-    `&facets[duoarea][]=${area}` +   // the area code we're querying
-    `&sort[0][column]=period` +
-    `&sort[0][direction]=desc` +     // newest data first
-    `&length=1`                      // we only need the most recent week
-  const res = await fetch(url)
-  if (!res.ok) return null
-  const json = await res.json()
-  const entry = json?.response?.data?.[0]  // ?. = optional chaining: safe if null
-  return entry?.value ? { price: parseFloat(entry.value), period: entry.period } : null
+  const areas = await fetchEIAareas([area])
+  return areas?.[area] ?? null
 }
 
 // ─────────────────────────────────────────
@@ -250,9 +246,7 @@ export async function fetchAllStatePrices() {
   const aaa = await fetchAAAprices()
   if (aaa?.prices && Object.keys(aaa.prices).length >= 40) return aaa.prices
 
-  // EIA fallback: weekly batch fetch
-  if (!EIA_KEY) return null
-
+  // EIA fallback: weekly batch fetch through the proxy
   const CACHE_KEY = 'eia_all_states_v1'
   try {
     const raw = localStorage.getItem(CACHE_KEY)
@@ -266,25 +260,12 @@ export async function fetchAllStatePrices() {
     ...Object.values(STATE_AREA),
     ...Object.values(PADD_FALLBACK),
   ])]
-  const areaParams = allAreas.map(a => `&facets[duoarea][]=${a}`).join('')
-  const url =
-    `https://api.eia.gov/v2/petroleum/pri/gnd/data/` +
-    `?api_key=${EIA_KEY}&frequency=weekly&data[0]=value&facets[product][]=EPM0` +
-    areaParams +
-    `&sort[0][column]=period&sort[0][direction]=desc&length=200`
-
   try {
-    const res = await fetch(url)
-    if (!res.ok) return null
-    const rows = (await res.json())?.response?.data ?? []
-    const areaPrice = {}
-    for (const row of rows) {
-      if (row.duoarea && row.value != null && !areaPrice[row.duoarea])
-        areaPrice[row.duoarea] = parseFloat(row.value)
-    }
+    const areaData = await fetchEIAareas(allAreas)
+    if (!areaData) return null
     const prices = {}
     for (const [stateName, area] of Object.entries(STATE_AREA)) {
-      const price = areaPrice[area] ?? areaPrice[PADD_FALLBACK[area]] ?? null
+      const price = areaData[area]?.price ?? areaData[PADD_FALLBACK[area]]?.price ?? null
       if (price != null) prices[stateName] = price
     }
     try { localStorage.setItem(CACHE_KEY, JSON.stringify({ prices, t: Date.now() })) } catch {}
@@ -311,7 +292,7 @@ export async function fetchStateGasPrice(stateName, county = null) {
     : null
 
   // ── Level 1: EIA metro (most granular — city-level accuracy) ─────────────
-  if (EIA_KEY && metroArea) {
+  if (metroArea) {
     const cached = getCached(`eia_${metroArea}`)
     if (cached) return { ...cached, source: 'EIA' }
     try {
@@ -336,7 +317,6 @@ export async function fetchStateGasPrice(stateName, county = null) {
   }
 
   // ── Level 3: EIA state / PADD fallback (weekly) ──────────────────────────
-  if (!EIA_KEY) return null
   try {
     const cached = getCached(`eia_${area}`)
     if (cached) return { ...cached, source: 'EIA' }
